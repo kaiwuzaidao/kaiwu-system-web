@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.umi/
+.umi-production/
+.idea/
+.vscode/
+.DS_Store
+.env
+.env.e2e
+playwright-report/
+test-results/
+*.log
