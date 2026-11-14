@@ -12,14 +12,6 @@ export type ProjectGeneration = {
   templateVersion: string;
   backendFiles: string[];
   frontendFiles: string[];
-  backendPushStatus: string;
-  frontendPushStatus: string;
-  backendRepositoryUrl?: string;
-  frontendRepositoryUrl?: string;
-  backendHttpCloneUrl?: string;
-  backendSshCloneUrl?: string;
-  frontendHttpCloneUrl?: string;
-  frontendSshCloneUrl?: string;
   lastError?: string;
   startedAt?: string;
   completedAt?: string;
@@ -27,20 +19,10 @@ export type ProjectGeneration = {
   updatedAt: string;
 };
 
-export function canStartLocalAiCoding(task: ProjectGeneration) {
-  return (
-    task.backendPushStatus === 'PUSHED' &&
-    task.frontendPushStatus === 'PUSHED' &&
-    task.backendFiles.includes('scripts/dev.sh') &&
-    task.frontendFiles.includes('scripts/dev.sh')
-  );
-}
-
+/** 新建任务只接受确定性脚手架（ADR 0038）；AI_PROJECT 已下线，仅作为历史任务的取值保留。 */
 export type ProjectGenerationInput = {
   projectId: string;
-  generationMode: 'AI_PROJECT' | 'BASIC_SCAFFOLD';
-  businessDescription?: string;
-  ddl?: string;
+  generationMode: 'BASIC_SCAFFOLD';
 };
 
 export type ProjectGenerationRetryInput = {
@@ -52,29 +34,7 @@ export type ProjectGenerationEditableInput = ProjectGenerationRetryInput & {
   taskNo: string;
   projectId: string;
   projectName: string;
-  generationMode: 'AI_PROJECT' | 'BASIC_SCAFFOLD';
-};
-
-export type MysqlSchemaImportInput = {
-  projectId: string;
-  host: string;
-  port: number;
-  database: string;
-  username: string;
-  password: string;
-};
-
-export type MysqlSchemaImportResult = {
-  database: string;
-  tableCount: number;
-  columnCount: number;
-  ddl: string;
-};
-
-export type ProjectGenerationPushInput = {
-  groupId?: string;
-  backendRepositoryUrl?: string;
-  frontendRepositoryUrl?: string;
+  generationMode: 'AI_PROJECT' | 'BASIC_SCAFFOLD' | 'DDL_SCAFFOLD';
 };
 
 export function queryProjectGenerations(projectId?: string) {
@@ -99,25 +59,6 @@ export function queryProjectGenerationInput(taskNo: string) {
 export function retryProjectGeneration(taskNo: string, input: ProjectGenerationRetryInput) {
   return apiRequest<ProjectGeneration>(
     `/api/project-generations/${encodeURIComponent(taskNo)}/retry`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
-    },
-  );
-}
-
-export function importMysqlSchema(input: MysqlSchemaImportInput) {
-  return apiRequest<MysqlSchemaImportResult>('/api/project-generations/schema/mysql', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
-  });
-}
-
-export function pushProjectGeneration(taskNo: string, input: ProjectGenerationPushInput) {
-  return apiRequest<ProjectGeneration>(
-    `/api/project-generations/${encodeURIComponent(taskNo)}/push`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

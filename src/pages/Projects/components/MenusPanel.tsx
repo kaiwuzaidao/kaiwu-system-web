@@ -26,6 +26,7 @@ import {
 } from '@/services/projects';
 import { referencedText } from '@/utils/referencedI18n';
 import { flattenMenus, type ProjectPermissionProps } from './types';
+import { kaiwuPalette } from '@/theme/tokens';
 
 export default function MenusPanel({ project, permissions }: ProjectPermissionProps) {
   const { message } = App.useApp();
@@ -53,7 +54,9 @@ export default function MenusPanel({ project, permissions }: ProjectPermissionPr
   useEffect(() => {
     setExpandInited(false);
     setExpandedKeys([]);
-    void load();
+    void load().catch((error) => {
+      void message.error(error instanceof Error ? error.message : String(error));
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id, intl.locale]);
 
@@ -222,7 +225,7 @@ export default function MenusPanel({ project, permissions }: ProjectPermissionPr
               const isFirst = idx <= 0;
               const isLast = idx < 0 || idx >= siblings.length - 1;
               if (!permissions.includes('system:project:menu')) {
-                return <span style={{ color: 'rgba(0,0,0,0.45)' }}>{record.sortNo}</span>;
+                return <span style={{ color: kaiwuPalette.textTertiary }}>{record.sortNo}</span>;
               }
               return (
                 <Space size={2}>
@@ -305,12 +308,16 @@ export default function MenusPanel({ project, permissions }: ProjectPermissionPr
                     id: record.status === 'ACTIVE' ? 'menus.disableConfirm' : 'menus.enableConfirm',
                   })}
                   onConfirm={async () => {
-                    await updateProjectMenuStatus(
-                      project.id,
-                      record.id,
-                      record.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE',
-                    );
-                    await load();
+                    try {
+                      await updateProjectMenuStatus(
+                        project.id,
+                        record.id,
+                        record.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE',
+                      );
+                      await load();
+                    } catch (error) {
+                      void message.error(error instanceof Error ? error.message : String(error));
+                    }
                   }}
                 >
                   <AuthButton
@@ -327,9 +334,13 @@ export default function MenusPanel({ project, permissions }: ProjectPermissionPr
                 <Popconfirm
                   title={intl.formatMessage({ id: 'menus.deleteConfirm' })}
                   onConfirm={async () => {
-                    await deleteProjectMenu(project.id, record.id);
-                    void message.success(intl.formatMessage({ id: 'menus.deleted' }));
-                    await load();
+                    try {
+                      await deleteProjectMenu(project.id, record.id);
+                      void message.success(intl.formatMessage({ id: 'menus.deleted' }));
+                      await load();
+                    } catch (error) {
+                      void message.error(error instanceof Error ? error.message : String(error));
+                    }
                   }}
                 >
                   <AuthButton

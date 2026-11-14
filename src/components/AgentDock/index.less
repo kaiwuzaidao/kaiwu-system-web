@@ -1,0 +1,1603 @@
+@import '../../theme/typography.less';
+// AI 助手对话窗。颜色与 src/theme/tokens.ts 的 V5 冷蓝保持一致，不另起色板。
+// AI 模式与传统模式共用同一套品牌色：切换时不应让人觉得离开了开物。
+@primary: #3b82f6;
+@primary-hover: #2563eb;
+@primary-soft: #eff6ff;
+@primary-shadow: rgba(59, 130, 246, 0.16);
+// V5 去渐变：品牌标记用实心主色。
+@brand-gradient: #3b82f6;
+@border: #e5ebf3;
+@text: #111827;
+@secondary: #6b7280;
+@thread-width: 880px;
+
+.agent-mark {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: @brand-gradient;
+}
+
+// 悬浮入口：品牌冷蓝圆钮。选择器叠加提高优先级，盖过 antd 主按钮的 hover 底色。
+.agent-dock-fab.agent-dock-fab.ant-btn {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1000;
+  width: 52px;
+  height: 52px;
+  border: 0;
+  background: @brand-gradient;
+  box-shadow: 0 4px 14px @primary-shadow;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+
+  &:not(:disabled):hover,
+  &:not(:disabled):focus-visible {
+    background: @brand-gradient;
+    box-shadow: 0 6px 18px rgba(59, 130, 246, 0.24);
+    transform: translateY(-2px);
+  }
+}
+
+// 聊天模式全屏覆盖平台菜单；回到菜单模式走头部的「返回菜单」。
+.agent-dock-drawer {
+  .ant-drawer-body {
+    display: flex;
+    padding: 0;
+    overflow: hidden;
+  }
+}
+
+.agent-dock {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+// ---------- 会话侧栏 ----------
+.agent-dock-sidebar {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 256px;
+  background: #f8fbff;
+  border-right: 1px solid @border;
+
+  &-brand {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    height: 68px;
+    padding: 0 16px;
+    color: @text;
+    font-weight: 600;
+    font-size: 16px;
+  }
+
+  &-new {
+    padding: 0 12px 8px;
+  }
+
+  &-caption {
+    padding: 8px 16px 4px;
+    color: @secondary;
+    font-size: 12px;
+  }
+
+  &-list {
+    flex: 1;
+    padding: 0 8px 8px;
+    overflow-y: auto;
+  }
+
+  &-state {
+    display: block;
+    padding: 16px 8px;
+    font-size: 13px;
+    text-align: center;
+  }
+
+  &-pager {
+    display: flex;
+    justify-content: center;
+    margin-top: 8px;
+  }
+
+  &-footer {
+    padding: 8px;
+    border-top: 1px solid @border;
+  }
+
+  &-extra {
+    padding: 8px 8px 4px 16px;
+  }
+
+  .agent-dock-sidebar-link.ant-btn {
+    justify-content: flex-start;
+    color: rgba(0, 0, 0, 0.65);
+  }
+}
+
+.agent-dock .agent-dock-session {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 2px;
+  border-radius: 6px;
+  transition: background 0.15s ease;
+
+  // 悬停底色放在整行上：鼠标移到删除图标时标题仍保持悬停态。
+  &:hover {
+    background: rgba(0, 0, 0, 0.04);
+  }
+
+  .agent-dock-session-title.ant-btn,
+  .agent-dock-session-title.ant-btn:not(:disabled):hover {
+    background: transparent;
+  }
+
+  .agent-dock-session-title.ant-btn {
+    justify-content: flex-start;
+    height: 36px;
+    padding: 0 36px 0 12px;
+    color: @text;
+
+    > span {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+  }
+
+  // 删除按钮平时隐藏，悬停或键盘聚焦到该行时出现；触屏设备没有悬停，始终显示。
+  .agent-dock-session-delete.ant-btn {
+    position: absolute;
+    right: 4px;
+    color: @secondary;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+
+    &:not(:disabled):hover {
+      color: #ff4d4f;
+      background: rgba(255, 77, 79, 0.08);
+    }
+  }
+
+  &:hover,
+  &:focus-within {
+    .agent-dock-session-delete.ant-btn {
+      opacity: 1;
+    }
+  }
+
+  &.is-active {
+    background: @primary-soft;
+
+    // 悬停时 antd 文本按钮会把文字改回默认色，选中态要一并覆盖。
+    .agent-dock-session-title.ant-btn,
+    .agent-dock-session-title.ant-btn:not(:disabled):hover {
+      color: @primary;
+      font-weight: 500;
+    }
+  }
+}
+
+@media (hover: none) {
+  .agent-dock .agent-dock-session .agent-dock-session-delete.ant-btn {
+    opacity: 1;
+  }
+}
+
+// ---------- 对话区 ----------
+.agent-dock-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  background: #fff;
+}
+
+.agent-dock-header {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+  align-items: center;
+  height: 68px;
+  padding: 0 12px;
+  border-bottom: 1px solid @border;
+
+  .agent-dock-header-title {
+    flex: 1;
+    min-width: 0;
+    margin: 0 8px 0 4px;
+    font-size: 16px;
+  }
+
+  .ant-btn {
+    color: rgba(0, 0, 0, 0.65);
+  }
+
+  &-divider {
+    width: 1px;
+    height: 16px;
+    margin: 0 4px;
+    background: @border;
+  }
+
+  .agent-dock-auto-open {
+    margin: 0 8px 0 4px;
+    color: rgba(0, 0, 0, 0.65);
+    white-space: nowrap;
+  }
+}
+
+.agent-dock-scroll {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.agent-dock-thread {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  max-width: @thread-width;
+  margin: 0 auto;
+  padding: 24px 24px 8px;
+}
+
+.agent-dock-loading {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 0;
+}
+
+.agent-dock-history-note {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+  color: @secondary;
+  font-size: 12px;
+  text-align: center;
+
+  &::before,
+  &::after {
+    flex: 1;
+    min-width: 24px;
+    height: 1px;
+    background: @border;
+    content: '';
+  }
+}
+
+.agent-dock-older {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.agent-dock-welcome {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 24px;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 0;
+
+  .ant-welcome {
+    max-width: 520px;
+  }
+
+  .ant-welcome-description {
+    color: rgba(0, 0, 0, 0.65);
+    font-size: 16px;
+    line-height: 1.6;
+  }
+}
+
+// 一问一答：X 的 Bubble 负责布局，颜色与圆角沿用平台 token。
+.agent-dock-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.agent-dock-ask.ant-bubble {
+  .ant-bubble-content {
+    max-width: 78%;
+    color: @text;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: @primary-soft;
+    border-radius: 16px 16px 4px 16px;
+  }
+}
+
+.agent-dock-time {
+  color: @secondary;
+  font-size: 12px;
+}
+
+// 助手回答里放卡片、表单与预览，内容区要撑满整行。
+.agent-dock-reply.ant-bubble {
+  .ant-bubble-content-wrapper {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .ant-bubble-content {
+    width: 100%;
+    padding: 3px 0 0;
+  }
+}
+
+.agent-dock-reply-body {
+  min-width: 0;
+}
+
+.agent-dock-answer {
+  margin: 0 0 8px;
+  color: @text;
+  line-height: 1.75;
+  word-break: break-word;
+
+  p,
+  ul,
+  ol {
+    margin: 0 0 8px;
+  }
+
+  ul,
+  ol {
+    padding-left: 20px;
+  }
+
+  &-heading {
+    font-weight: 600;
+  }
+
+  > :last-child {
+    margin-bottom: 0;
+  }
+}
+
+// 代码块：设计规范统一样式（#fafafa + 1px #f0f0f0 + 圆角 8 + 内边距 12 + 12px 等宽），右上角复制。
+.agent-dock-code {
+  position: relative;
+  margin: 0 0 8px;
+
+  pre {
+    margin: 0;
+    padding: 12px 40px 12px 12px;
+    overflow-x: auto;
+    font-size: 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    line-height: 1.6;
+    white-space: pre;
+    background: #fafafa;
+    border: 1px solid @border;
+    border-radius: 8px;
+  }
+
+  &-copy.ant-typography {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+  }
+}
+
+.agent-dock-related {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 4px 0 8px;
+  font-size: 13px;
+}
+
+.agent-dock-thinking {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+  height: 24px;
+  color: @secondary;
+}
+
+.agent-dock-dots {
+  display: inline-flex;
+  gap: 4px;
+
+  i {
+    width: 6px;
+    height: 6px;
+    background: @primary;
+    border-radius: 50%;
+    opacity: 0.25;
+    animation: agent-dock-dot 1.2s ease-in-out infinite;
+
+    &:nth-child(2) {
+      animation-delay: 0.15s;
+    }
+
+    &:nth-child(3) {
+      animation-delay: 0.3s;
+    }
+  }
+}
+
+@keyframes agent-dock-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+  }
+
+  40% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-dock-dots i {
+    opacity: 0.6;
+    animation: none;
+  }
+
+  .agent-dock-fab.agent-dock-fab.ant-btn {
+    transition: none;
+  }
+}
+
+// ---------- 首次使用：接入大模型、示例问题 ----------
+.agent-dock-setup {
+  max-width: 560px;
+  margin-top: 4px;
+
+  &-hint.ant-typography {
+    margin-bottom: 16px;
+    font-size: 13px;
+  }
+}
+
+// 示例问题：外观对齐 Ant Design X 的 Prompts 卡片；X 的 Prompts 选项是 div，键盘不可达，这里保留按钮。
+.agent-dock-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 640px;
+
+  &-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+
+    .ant-btn {
+      justify-content: flex-start;
+      height: auto;
+      min-height: 68px;
+      padding: 12px 16px;
+      color: @text;
+      text-align: left;
+      white-space: normal;
+      background: #fff;
+      border-color: @border;
+      border-radius: 12px;
+    }
+
+    .ant-btn:not(:disabled):hover {
+      color: @primary;
+      background: @primary-soft;
+      border-color: @primary-soft;
+    }
+  }
+}
+
+// 结构化结果卡片（Cards / ProjectBrowser）
+.agent-dock-card {
+  margin-top: 12px;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid @border;
+  border-radius: 8px;
+}
+
+.agent-dock-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.agent-project-list {
+  display: grid;
+  gap: 8px;
+}
+
+.kaiwu-project-entry.is-chat {
+  flex-wrap: nowrap;
+  height: auto;
+  min-width: 0;
+  padding: 12px 14px;
+
+  .kaiwu-project-entry-name,
+  .kaiwu-project-entry-code {
+    overflow: visible;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .kaiwu-project-card-state {
+    align-self: center;
+    flex-shrink: 0;
+  }
+
+  > svg {
+    flex-shrink: 0;
+    color: #8493a8;
+  }
+}
+
+.agent-dock-data-at {
+  display: block;
+  margin-top: 12px;
+  font-size: 12px;
+}
+
+// ---------- 输入框 ----------
+.agent-dock-composer-wrap {
+  flex-shrink: 0;
+  padding: 8px 24px 24px;
+}
+
+.agent-dock-composer.ant-sender {
+  max-width: @thread-width - 48px;
+  margin: 0 auto;
+  border-radius: 16px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+
+  &:focus-within {
+    border-color: @primary;
+    box-shadow:
+      0 0 0 3px rgba(59, 130, 246, 0.12),
+      0 4px 16px rgba(15, 23, 42, 0.06);
+  }
+}
+
+// ---------- 设置浮层与记忆 ----------
+.agent-dock-settings-anchor {
+  display: inline-flex;
+}
+
+.agent-dock-settings {
+  width: 280px;
+
+  &-footer {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.agent-dock-memory {
+  &-hint.ant-typography {
+    margin-bottom: 16px;
+    font-size: 13px;
+  }
+
+  &-form {
+    padding: 16px;
+    background: #fafafa;
+    border: 1px solid @border;
+    border-radius: 8px;
+
+    // 文本框下方有字数统计，留足间距避免和操作行重叠。
+    .ant-form-item {
+      margin-bottom: 24px;
+    }
+  }
+
+  &-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  &-list {
+    margin-top: 8px;
+
+    .ant-list-item.is-disabled .ant-typography {
+      color: @secondary;
+    }
+  }
+}
+
+// ---------- 窄屏 ----------
+@media (max-width: 767px) {
+  .agent-dock-sidebar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 3;
+    width: min(280px, 86vw);
+    box-shadow: 8px 0 24px rgba(15, 23, 42, 0.12);
+  }
+
+  .agent-dock-scrim {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    background: rgba(0, 0, 0, 0.25);
+  }
+
+  .agent-dock-thread {
+    padding: 16px 16px 8px;
+  }
+
+  .agent-dock-composer-wrap {
+    padding: 8px 16px 16px;
+  }
+
+  .agent-dock-ask.ant-bubble .ant-bubble-content {
+    max-width: 88%;
+  }
+}
+
+// HTML V5 的完整 AI 布局：共享顶部操作栏、76px 品牌导航、会话栏与对话区。
+.agent-shell {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.agent-shell-topbar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  height: 72px;
+  padding: 0 38px;
+  border-bottom: 1px solid #e7edf5;
+  background: #fff;
+}
+.agent-shell-body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.agent-shell-rail {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: 76px;
+  padding: 20px 10px;
+  border-right: 1px solid @border;
+  background: #fff;
+}
+.agent-shell-rail-links {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  overflow-y: auto;
+}
+.agent-shell-rail-links .ant-btn {
+  flex-shrink: 0;
+  width: 100%;
+  height: 42px;
+  color: @kw-text-secondary;
+}
+.agent-shell-rail-links .ant-btn .anticon {
+  font-size: 18px;
+}
+.agent-shell-body > .agent-dock {
+  height: auto;
+}
+.agent-shell .agent-dock-sidebar {
+  width: 250px;
+  background: #fafcff;
+}
+.agent-shell .agent-dock-sidebar-brand {
+  height: 64px;
+  font-size: 13px;
+}
+.agent-shell .agent-dock-header {
+  height: 64px;
+}
+.agent-shell .agent-dock-thread {
+  max-width: 770px;
+  padding: 35px 36px 16px;
+}
+.agent-shell .agent-dock-welcome {
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 9vh 0 32px;
+}
+.agent-shell .ant-welcome {
+  padding: 0;
+}
+.agent-shell .ant-welcome-title {
+  font-size: 27px;
+  font-weight: 700;
+  letter-spacing: -0.7px;
+}
+.agent-shell .ant-welcome-description {
+  font-size: 13px;
+  color: @kw-text-tertiary;
+}
+.agent-shell .agent-dock-suggestions {
+  max-width: 610px;
+}
+.agent-shell .agent-dock-suggestions-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.agent-shell .agent-dock-suggestions .ant-btn {
+  min-height: 67px;
+  padding: 15px 14px;
+  font-size: 12px;
+  border-radius: 10px;
+}
+.agent-shell .agent-dock-composer {
+  max-width: 700px;
+  border: 1px solid #eaf3ff;
+  border-radius: 15px;
+  box-shadow: 0 8px 25px rgba(45, 49, 69, 0.065);
+}
+.agent-shell .agent-dock-composer-wrap {
+  padding: 20px 35px 24px;
+}
+@media (max-width: 1120px) {
+  .agent-shell-topbar {
+    padding-inline: 24px;
+  }
+  .agent-shell .agent-dock-sidebar {
+    width: 200px;
+  }
+}
+@media (max-width: 767px) {
+  .agent-shell-topbar {
+    height: 62px;
+    gap: 6px;
+    padding-inline: 12px;
+  }
+  .agent-shell-topbar .kaiwu-header-breadcrumb > span {
+    display: none;
+  }
+  .agent-shell .agent-dock-sidebar {
+    width: min(280px, 86vw);
+  }
+  .agent-shell .agent-dock-thread {
+    padding: 20px 15px 12px;
+  }
+  .agent-shell .agent-dock-welcome {
+    padding-top: 3vh;
+  }
+  .agent-shell .ant-welcome-title {
+    font-size: 23px;
+  }
+  .agent-shell .agent-dock-header {
+    flex-wrap: nowrap;
+    height: 56px;
+    min-height: 56px;
+    padding-block: 0;
+  }
+  .agent-shell .agent-dock-composer-wrap {
+    padding: 12px;
+  }
+}
+.agent-shell-topbar {
+  height: 68px;
+  padding-inline: 34px;
+}
+.agent-shell-inspector {
+  flex-shrink: 0;
+  width: 300px;
+  padding: 24px 20px;
+  border-left: 1px solid #edf0f4;
+  background: #fafcff;
+  overflow-y: auto;
+}
+.agent-shell-inspector h5.ant-typography {
+  font-size: 13px;
+}
+.agent-shell-inspector .ant-typography-secondary {
+  font-size: 12px;
+  line-height: 1.8;
+}
+.agent-shell-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 13px;
+  border: 1px solid #eaf3ff;
+  border-radius: 10px;
+  background: #fff;
+}
+.agent-shell-context .ant-typography {
+  width: 100%;
+}
+.agent-shell-preview {
+  padding: 20px 12px;
+  margin-top: 24px;
+  border: 1px dashed #eaf3ff;
+  border-radius: 12px;
+}
+@media (max-width: 1120px) {
+  .agent-shell-inspector {
+    width: 265px;
+    padding: 18px 13px;
+  }
+}
+@media (max-width: 880px) {
+  .agent-shell-inspector {
+    display: none;
+  }
+}
+@media (max-width: 767px) {
+  .agent-shell-topbar {
+    height: 62px;
+    padding-inline: 12px;
+  }
+}
+.agent-shell .ant-welcome {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 21px;
+}
+.agent-shell .ant-welcome .agent-mark {
+  width: 45px !important;
+  height: 45px !important;
+  color: #fff;
+  background: #1e4a86;
+  border-radius: 13px !important;
+}
+
+// ---------- V5 AI 工作空间（按设计稿最终计算样式） ----------
+// 列宽：会话 250 / 对话自适应 / 上下文 320；随宽度依次收窄，与设计稿断点一致。
+.agent-shell .agent-dock-sidebar {
+  width: 250px;
+  padding: 22px 12px;
+  background: #fafcff;
+  border-right-color: #e5ebf3;
+}
+.agent-shell .agent-dock-sidebar-new {
+  padding: 0;
+  .ant-btn {
+    height: 39px;
+    color: @kw-text;
+    font-size: 13px;
+    font-weight: 600;
+    border-color: #e0e3ec;
+    border-radius: 9px;
+  }
+}
+.agent-shell .agent-dock-sidebar-caption {
+  margin: 27px 8px 11px;
+  padding: 0;
+  color: @kw-text-tertiary;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+.agent-shell .agent-dock-sidebar-list {
+  padding: 0;
+}
+.agent-shell .agent-dock-session {
+  margin-bottom: 0;
+  border-radius: 8px;
+  &:hover,
+  &.is-active {
+    background: #eef5ff;
+  }
+  .agent-dock-session-title.ant-btn {
+    gap: 9px;
+    height: auto;
+    padding: 11px 32px 11px 12px;
+    color: @kw-text-tertiary;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  &.is-active .agent-dock-session-title.ant-btn,
+  &.is-active .agent-dock-session-title.ant-btn:not(:disabled):hover {
+    color: #193c65;
+    font-weight: 600;
+  }
+}
+.agent-shell .agent-dock-sidebar-footer {
+  padding: 17px 5px 0;
+  border-top-color: #eaf3ff;
+  .agent-dock-sidebar-link.ant-btn {
+    height: auto;
+    padding: 0;
+    color: @kw-text-tertiary;
+    font-size: 12px;
+    line-height: 1.6;
+    &:not(:disabled):hover {
+      color: #2563eb;
+    }
+  }
+}
+.agent-dock-sidebar-tip {
+  color: @kw-text-tertiary;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.agent-shell .agent-dock-sidebar-extra {
+  padding: 10px 0 0;
+}
+
+.agent-shell .agent-dock-main {
+  position: relative;
+  background: #fff;
+}
+.agent-shell .agent-dock-header {
+  gap: 4px;
+  height: 64px;
+  padding: 0 34px;
+  border-bottom-color: #eaf3ff;
+  .agent-dock-header-title {
+    display: flex;
+    flex: 1;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+    margin: 0;
+    font-size: 14px;
+    .ant-typography {
+      font-size: 14px;
+    }
+  }
+}
+.agent-dock-header-sub {
+  overflow: hidden;
+  color: @kw-text-tertiary;
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.agent-dock-model-tag {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 5px;
+  margin-left: 8px;
+  padding: 4px 7px;
+  color: #228763;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  background: #edfaf3;
+  border: 1px solid #d7f0e3;
+  border-radius: 6px;
+  &::before {
+    width: 5px;
+    height: 5px;
+    background: currentColor;
+    border-radius: 50%;
+    opacity: 0.78;
+    content: '';
+  }
+}
+
+.agent-shell .agent-dock-thread {
+  max-width: 860px;
+  padding: 35px 36px 16px;
+}
+.agent-shell .agent-dock-welcome {
+  display: block;
+  flex: none;
+  width: 100%;
+  max-width: 650px;
+  margin: 8.3vh auto 0;
+  padding: 0 0 24px;
+}
+.agent-dock-welcome-mark {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  margin-bottom: 21px;
+  color: #fff;
+  background: #1e4a86;
+  border-radius: 13px;
+}
+.agent-dock-welcome-title {
+  margin: 0 0 10px;
+  color: @kw-text-strong;
+  font-size: 29px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -1px;
+}
+.agent-dock-welcome-desc {
+  color: @kw-text-tertiary;
+  font-size: 13px;
+  line-height: 1.9;
+}
+.agent-shell .agent-dock-suggestions {
+  display: block;
+  max-width: none;
+}
+.agent-dock-suggestions-label {
+  margin: 39px 0 14px;
+  color: @kw-text-tertiary;
+  font-size: 12px;
+  font-weight: 600;
+}
+.agent-shell .agent-dock-suggestions-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.agent-dock-suggestion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+  min-height: 76px;
+  padding: 16px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  background: #fff;
+  border: 1px solid #eaf3ff;
+  border-radius: 10px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+  strong {
+    display: block;
+    color: @kw-text-secondary;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  > span > span {
+    display: block;
+    margin-top: 6px;
+    color: @kw-text-tertiary;
+    font-size: 12px;
+  }
+  > .kaiwu-line-icon {
+    color: #3b82f6;
+  }
+  &:not(:disabled):hover {
+    background: #f9fbff;
+    border-color: #bfdbfe;
+  }
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+  &:focus-visible {
+    outline: 2px solid #60a5fa;
+    outline-offset: 2px;
+  }
+}
+
+.agent-shell .agent-dock-composer-wrap {
+  padding: 20px 35px 19px;
+}
+.agent-shell .agent-dock-composer.ant-sender {
+  max-width: 860px;
+  padding: 16px;
+  border: 1px solid #e2e5eb;
+  border-radius: 16px;
+  box-shadow: 0 9px 28px rgba(22, 33, 60, 0.055);
+  &:focus-within {
+    border-color: #93c5fd;
+    box-shadow: 0 8px 29px rgba(59, 130, 246, 0.1);
+  }
+  .ant-sender-content {
+    padding: 0;
+  }
+  .ant-sender-input {
+    min-height: 53px;
+    padding: 1px 2px;
+    color: @kw-text;
+    font-size: 14px;
+    &::placeholder {
+      color: @kw-text-placeholder;
+    }
+  }
+  .ant-sender-footer {
+    padding: 0;
+  }
+}
+.agent-dock-composer-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  .ant-btn-primary {
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    box-shadow: none;
+  }
+}
+.agent-dock-composer-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    color: @kw-text-tertiary;
+    font-size: 12px;
+    white-space: nowrap;
+    background: #fff;
+    border: 1px solid #eaf3ff;
+    border-radius: 7px;
+  }
+}
+
+// 76px 导航：与传统模式共用品牌与图标，选中态不着色（设计稿如此）。
+.agent-shell .agent-shell-rail {
+  gap: 0;
+  padding: 0 10px 14px;
+  .kaiwu-sidebar-brand-mark {
+    flex-shrink: 0;
+    margin: 18px 0 13px;
+  }
+}
+.agent-shell .agent-shell-rail-links {
+  gap: 10px;
+  padding-top: 17px;
+  .ant-btn {
+    height: 44px;
+    color: @kw-text-secondary;
+    .anticon {
+      font-size: 18px;
+    }
+  }
+}
+.agent-shell-rail-avatar {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-top: 12px;
+  padding: 0;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 700;
+  background: #eaf3ff;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.agent-shell-rail {
+  position: relative;
+  &::after {
+    position: absolute;
+    right: 0;
+    bottom: 62px;
+    left: 0;
+    height: 1px;
+    background: #e5ebf3;
+    content: '';
+  }
+}
+
+// 右侧上下文与待确认操作。
+.agent-shell .agent-shell-inspector {
+  width: 320px;
+  padding: 23px 19px;
+  background: #fbfcfe;
+  border-left-color: #edf0f4;
+}
+.agent-shell-inspector-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: @kw-text-strong;
+  font-size: 14px;
+  font-weight: 600;
+  .ant-btn {
+    color: @kw-text-tertiary;
+  }
+}
+.agent-shell-inspector-sub {
+  margin: 9px 0 25px;
+  color: @kw-text-tertiary;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.agent-shell-mini {
+  margin: 0 0 12px;
+  color: @kw-text-tertiary;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+.agent-shell .agent-shell-context {
+  display: block;
+  padding: 14px 13px;
+  background: #fff;
+  border: 1px solid #eaf3ff;
+  border-radius: 10px;
+}
+.agent-shell-context-label {
+  margin-bottom: 9px;
+  color: @kw-text-tertiary;
+  font-size: 12px;
+}
+.agent-shell-context-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: @kw-text-strong;
+  font-size: 13px;
+  font-weight: 600;
+  .kaiwu-line-icon {
+    color: #193c65;
+  }
+}
+.agent-shell-context-mini {
+  margin-top: 5px;
+  color: @kw-text-tertiary;
+  font-size: 12px;
+}
+.agent-shell-scope {
+  margin-top: 13px;
+  padding: 9px 11px;
+  color: @kw-text-secondary;
+  font-size: 12px;
+  background: #eaf3ff;
+  border: 1px solid #eceef3;
+  border-radius: 8px;
+  strong {
+    color: @kw-text;
+  }
+}
+.agent-shell-divider {
+  height: 1px;
+  margin: 20px 0;
+  background: #e9ecf1;
+}
+.agent-shell-preview-title {
+  margin-bottom: 8px;
+  color: @kw-text-strong;
+  font-size: 13px;
+  font-weight: 600;
+}
+.agent-shell-preview-sub {
+  color: @kw-text-tertiary;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.agent-shell-preview-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin-top: 16px;
+  padding: 14px;
+  color: @kw-text-tertiary;
+  font-size: 12px;
+  line-height: 1.9;
+  text-align: center;
+  border: 1px dashed #e3ebf6;
+  border-radius: 12px;
+  .kaiwu-line-icon {
+    margin-bottom: 4px;
+  }
+}
+.agent-shell-preview-card {
+  margin-top: 14px;
+  padding: 15px;
+  background: #fff;
+  border: 1px solid #eaf3ff;
+  border-radius: 10px;
+  p {
+    margin: 8px 0 12px;
+    color: @kw-text-tertiary;
+    font-size: 12px;
+    line-height: 1.7;
+  }
+}
+.agent-shell-preview-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  strong {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 13px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}
+
+@media (max-width: 1260px) {
+  .agent-shell .agent-dock-sidebar {
+    width: 205px;
+    padding-inline: 10px;
+  }
+  .agent-shell .agent-shell-inspector {
+    width: 270px;
+    padding: 20px 13px;
+  }
+}
+@media (max-width: 1120px) {
+  .agent-shell .agent-dock-sidebar {
+    width: 188px;
+  }
+  .agent-shell .agent-shell-inspector {
+    width: 265px;
+    padding: 18px 13px;
+  }
+}
+@media (max-width: 991px) {
+  .agent-shell .agent-shell-inspector {
+    display: none;
+  }
+}
+@media (max-width: 767px) {
+  .agent-shell .agent-dock-sidebar {
+    width: min(280px, 86vw);
+  }
+  .agent-shell .agent-dock-header {
+    padding: 0 12px;
+  }
+  .agent-shell .agent-dock-thread {
+    padding: 20px 15px 12px;
+  }
+  .agent-shell .agent-dock-welcome {
+    margin-top: 3vh;
+  }
+  .agent-dock-welcome-title {
+    font-size: 23px;
+  }
+  .agent-dock-suggestion {
+    min-height: 84px;
+    padding: 11px;
+    strong {
+      font-size: 12px;
+    }
+    > span > span {
+      font-size: 12px;
+    }
+  }
+  .agent-shell .agent-dock-composer-wrap {
+    padding: 12px;
+  }
+  .agent-shell .agent-dock-composer.ant-sender {
+    padding: 12px;
+  }
+}
+
+// 导航栏贯穿整屏高度，品牌标记与顶栏同高；顶栏与三栏内容放在右侧一列。
+.agent-dock-drawer .agent-shell {
+  flex-direction: row;
+}
+.agent-shell-column {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.agent-shell .agent-shell-rail {
+  padding: 0 10px 14px;
+  .kaiwu-sidebar-brand-mark {
+    margin: 16px 0 0;
+  }
+}
+.agent-shell .agent-shell-rail-links {
+  gap: 5px;
+  padding-top: 22px;
+}
+.agent-shell-rail::after {
+  bottom: 62px;
+}
+.agent-dock-composer-foot .ant-btn-primary:disabled {
+  color: #fff;
+  background: #93c5fd;
+  border-color: #93c5fd;
+}
+
+// ---------- 对话与待确认操作（V5 原型：对话里只留摘要，表单与确认在右侧栏） ----------
+.agent-shell .agent-dock-main {
+  background: radial-gradient(circle at 50% 28%, #f8fbff 0, #fff 56%);
+}
+.agent-shell .agent-dock-reply .agent-mark {
+  background: #172c49;
+  border-radius: 9px !important;
+}
+.agent-shell .agent-dock-ask.ant-bubble .ant-bubble-content {
+  padding: 10px 14px;
+  color: #193c65;
+  background: #eaf3ff;
+  border-radius: 10px;
+}
+.agent-dock-pending-summary {
+  max-width: 480px;
+  margin: 12px 0 4px;
+  padding: 14px 15px;
+  background: #fff;
+  border: 1px solid #eaf3ff;
+  border-radius: 10px;
+  > strong {
+    display: block;
+    margin-bottom: 10px;
+    color: @kw-text-strong;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  p {
+    margin: 10px 0 0;
+    color: @kw-text-tertiary;
+    font-size: 13px;
+  }
+}
+// 右侧栏里的表单/预览卡片：去掉对话内的外边距与宽度上限，字段一列排开。
+.agent-shell-pending {
+  margin-top: 14px;
+  .ant-card {
+    max-width: none !important;
+    margin: 0 !important;
+    background: #fff;
+    border: 1px solid #eaf3ff;
+    border-radius: 10px;
+    box-shadow: none;
+  }
+  .ant-card-head {
+    min-height: 0;
+    padding: 14px 15px 0;
+    font-size: 14px;
+    border-bottom: 0;
+  }
+  .ant-card-body {
+    padding: 12px 15px 15px;
+  }
+  .ant-row > .ant-col {
+    flex: 0 0 100%;
+    max-width: 100%;
+  }
+  .ant-form-item {
+    margin-bottom: 13px;
+  }
+  .ant-form-item-label > label {
+    color: @kw-text-secondary;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .ant-alert {
+    font-size: 12px;
+  }
+  .ant-descriptions-item-label,
+  .ant-descriptions-item-content {
+    font-size: 13px;
+  }
+}
+// 右侧栏里按钮行靠右、主操作在最右（原型「取消｜确认执行」）。
+.agent-shell-pending .agent-dock-card-actions {
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+  width: 100%;
+  .ant-btn {
+    height: 32px;
+    padding: 0 14px;
+    font-size: 13px;
+  }
+}
+
+// ---------- 右侧栏加宽与表单密度：待确认操作有表单时不再拥挤 ----------
+.agent-shell .agent-shell-inspector {
+  width: 360px;
+  padding: 22px 20px;
+}
+@media (min-width: 1680px) {
+  .agent-shell .agent-shell-inspector {
+    width: 392px;
+  }
+}
+@media (max-width: 1260px) {
+  .agent-shell .agent-shell-inspector {
+    width: 300px;
+    padding: 20px 14px;
+  }
+}
+@media (max-width: 1120px) {
+  .agent-shell .agent-shell-inspector {
+    width: 285px;
+  }
+}
+// 有待确认操作时把上下文区收紧：说明与范围提示让位给表单，当前上下文卡保留。
+.agent-shell-inspector.has-pending {
+  .agent-shell-inspector-sub,
+  .agent-shell-mini,
+  .agent-shell-scope {
+    display: none;
+  }
+  .agent-shell-inspector-head {
+    margin-bottom: 12px;
+  }
+  .agent-shell-context {
+    padding: 10px 12px;
+  }
+  .agent-shell-context-label {
+    margin-bottom: 5px;
+  }
+  .agent-shell-divider {
+    margin: 16px 0;
+  }
+}
+.agent-dock-drawer .agent-shell-pending {
+  .ant-card-body > .ant-space {
+    gap: 12px !important;
+  }
+  .ant-alert {
+    align-items: flex-start;
+    padding: 7px 10px;
+    font-size: 12px;
+    line-height: 1.6;
+    .ant-alert-icon {
+      margin: 3px 8px 0 0;
+      font-size: 13px;
+    }
+  }
+  .ant-form-item {
+    margin-bottom: 12px;
+  }
+  .ant-form-item-label {
+    padding-bottom: 4px;
+  }
+  .ant-input,
+  .ant-input-number,
+  .ant-picker,
+  .ant-select:not(.ant-select-customize-input) .ant-select-selector {
+    font-size: 13px;
+  }
+  .ant-input-affix-wrapper,
+  .ant-input:not(textarea),
+  .ant-input-number,
+  .ant-picker,
+  .ant-select-single:not(.ant-select-customize-input) .ant-select-selector {
+    min-height: 34px;
+  }
+  // 文本域的字数统计绝对定位在框下方，给它留出一行，避免压到按钮行。
+  .ant-form-item:has(.ant-input-textarea-show-count) {
+    margin-bottom: 28px;
+  }
+  .ant-input-textarea-show-count .ant-input-data-count {
+    font-size: 12px;
+  }
+  .agent-dock-card-actions {
+    margin-top: 4px;
+    padding-top: 12px;
+    border-top: 1px solid #eef2f7;
+  }
+}

@@ -1,7 +1,7 @@
 import { App } from 'antd';
 import { useIntl } from '@umijs/max';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { queryI18nResources, type I18nResource } from '@/services/i18n';
+import { queryI18nResourceOptions, type I18nResource } from '@/services/i18n';
 
 function parseTranslations(resource?: I18nResource): Record<string, string> {
   if (!resource?.translationsJson) return {};
@@ -28,7 +28,7 @@ export function useI18nResources(currentKey?: string) {
   const loadResources = useCallback(
     async (silent = false) => {
       try {
-        const rows = await queryI18nResources();
+        const rows = await queryI18nResourceOptions();
         setResources(rows);
         setResourcesLoaded(true);
         return rows;

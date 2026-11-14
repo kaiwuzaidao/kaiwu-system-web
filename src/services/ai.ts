@@ -7,7 +7,6 @@ export type AiProviderConfig = {
   model: string;
   temperature: number;
   timeoutSeconds: number;
-  enabled: boolean;
   lastTestStatus?: string;
   lastTestMessage?: string;
   lastTestAt?: string;
@@ -21,7 +20,6 @@ export type AiProviderSaveInput = {
   model: string;
   temperature: number;
   timeoutSeconds: number;
-  enabled: boolean;
 };
 
 export type AiConnectionTest = {
@@ -47,5 +45,39 @@ export function saveAiProvider(input: AiProviderSaveInput) {
 export function testAiProvider() {
   return apiRequest<AiConnectionTest>('/api/ai/provider/test', {
     method: 'POST',
+  });
+}
+
+export type AiModel = AiProviderConfig & { id: string };
+export type AiModelSaveInput = AiProviderSaveInput & { id?: string };
+export type AiModelRoutes = { planModelId: string | null; answerModelId: string | null };
+
+export function queryAiModels() {
+  return apiRequest<AiModel[]>('/api/ai/models');
+}
+
+export function saveAiModel(input: AiModelSaveInput) {
+  return apiRequest<AiModel>('/api/ai/models', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+}
+
+export function testAiModel(id: string) {
+  return apiRequest<AiConnectionTest>(`/api/ai/models/${encodeURIComponent(id)}/test`, {
+    method: 'POST',
+  });
+}
+
+export function queryAiModelRoutes() {
+  return apiRequest<AiModelRoutes>('/api/ai/model-routes');
+}
+
+export function saveAiModelRoutes(input: AiModelRoutes) {
+  return apiRequest<AiModelRoutes>('/api/ai/model-routes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
   });
 }

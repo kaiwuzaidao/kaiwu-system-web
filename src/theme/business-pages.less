@@ -1,0 +1,243 @@
+// 仅补充 Kaiwu 业务内容布局；控件与页头规格由 Ant Design Pro 公共主题负责。
+.kaiwu-home-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin-bottom: 24px;
+  padding: 0 0 8px;
+}
+.kaiwu-home-heading h1 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 32px;
+}
+.kaiwu-home-heading p {
+  margin: 0;
+  color: rgba(0, 0, 0, 0.65);
+  font-size: 14px;
+}
+.kaiwu-home-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 24px;
+  margin-bottom: 24px;
+}
+.kaiwu-home-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+.kaiwu-stat-card {
+  position: relative;
+}
+.kaiwu-stat-label {
+  display: block;
+  color: rgba(0, 0, 0, 0.65);
+  font-size: 14px;
+}
+.kaiwu-stat-card strong {
+  display: block;
+  margin: 12px 0;
+  color: rgba(0, 0, 0, 0.88);
+  font-size: 30px;
+  font-weight: 400;
+  line-height: 38px;
+}
+.kaiwu-stat-card strong.kaiwu-stat-state {
+  font-size: 24px;
+}
+.kaiwu-stat-card strong + span {
+  display: block;
+  padding-top: 12px;
+  border-top: 1px solid rgba(5, 5, 5, 0.06);
+  color: rgba(0, 0, 0, 0.65);
+  font-size: 14px;
+}
+.kaiwu-stat-icon {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  color: rgba(0, 0, 0, 0.45);
+}
+.kaiwu-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.kaiwu-section-title small {
+  color: rgba(0, 0, 0, 0.45);
+  font-weight: 400;
+  font-size: 12px;
+}
+.kaiwu-home-todo-list {
+  max-height: 340px;
+  overflow-y: auto;
+}
+.kaiwu-home-todo-more {
+  display: block;
+  margin-top: 12px;
+  color: rgba(0, 0, 0, 0.45);
+}
+.kaiwu-todo-empty {
+  padding: 24px 0;
+  color: rgba(0, 0, 0, 0.45);
+  text-align: center;
+}
+.kaiwu-todo-empty .anticon {
+  margin-inline-end: 8px;
+  color: #52c41a;
+}
+.kaiwu-todo-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(5, 5, 5, 0.06);
+}
+.kaiwu-todo-card-icon {
+  flex-shrink: 0;
+  font-size: 18px;
+}
+.kaiwu-todo-card-copy {
+  flex: 1;
+  min-width: 0;
+}
+.kaiwu-todo-card-copy strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+}
+.kaiwu-todo-card-copy .ant-typography {
+  display: block;
+  margin-top: 4px;
+  color: rgba(0, 0, 0, 0.45);
+}
+.kaiwu-project-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  height: 100%;
+  padding: 24px;
+  border: 1px solid rgba(5, 5, 5, 0.06);
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  transition: box-shadow 0.2s;
+}
+.kaiwu-project-entry:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+.kaiwu-project-entry-copy {
+  flex: 1;
+  min-width: 0;
+}
+.kaiwu-project-entry-name {
+  color: rgba(0, 0, 0, 0.88);
+  font-size: 14px;
+  font-weight: 600;
+}
+.kaiwu-project-entry-code {
+  overflow: hidden;
+  margin-top: 4px;
+  color: rgba(0, 0, 0, 0.45);
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kaiwu-project-card-state {
+  align-self: flex-start;
+}
+.kaiwu-project-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-basis: 100%;
+  padding-top: 12px;
+  color: rgba(0, 0, 0, 0.45);
+  font-size: 12px;
+}
+.kaiwu-project-card-footer strong {
+  font-weight: 400;
+}
+.kaiwu-project-card-go {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #1677ff;
+}
+.kaiwu-project-avatar {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #e6f4ff;
+  color: #1677ff;
+  font-weight: 500;
+}
+.kaiwu-project-avatar.is-coral {
+  background: #fff1f0;
+  color: #f5222d;
+}
+.kaiwu-project-avatar.is-teal {
+  background: #e6fffb;
+  color: #13c2c2;
+}
+.kaiwu-project-avatar.is-default {
+  background: #f9f0ff;
+  color: #722ed1;
+}
+.kaiwu-project-name.ant-btn {
+  height: auto;
+  padding: 0;
+  font-weight: 500;
+}
+.kaiwu-project-more {
+  min-width: 160px;
+  padding: 4px;
+}
+.kaiwu-project-more .ant-btn {
+  display: flex;
+  justify-content: flex-start;
+  width: 100%;
+}
+.kaiwu-more-trigger.ant-btn {
+  color: rgba(0, 0, 0, 0.45);
+}
+.kaiwu-project-detail-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.kaiwu-project-detail-heading > strong {
+  font-size: 20px;
+  font-weight: 600;
+}
+.kaiwu-project-detail-heading code {
+  flex-basis: 100%;
+  color: rgba(0, 0, 0, 0.45);
+}
+@media (max-width: 1120px) {
+  .kaiwu-home-overview {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 767px) {
+  .kaiwu-home-stats {
+    grid-template-columns: 1fr;
+  }
+  .kaiwu-home-heading {
+    gap: 16px;
+  }
+  .kaiwu-table-search {
+    max-width: 160px;
+  }
+}

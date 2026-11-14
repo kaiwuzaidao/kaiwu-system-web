@@ -37,8 +37,21 @@ export default function MembersPanel({ project, permissions }: ProjectPermission
   };
 
   useEffect(() => {
-    void load();
+    void load().catch((error) => {
+      void message.error(error instanceof Error ? error.message : String(error));
+    });
   }, [project.id]);
+
+  // 角色在同一抽屉的「角色授权」页维护，本页加载后可能新增或停用了角色；打开表单前刷新一次。
+  const openForm = (member?: ProjectMember) => {
+    setEditing(member);
+    setOpen(true);
+    void queryProjectRoles(project.id)
+      .then(setRoles)
+      .catch((error) => {
+        void message.error(error instanceof Error ? error.message : String(error));
+      });
+  };
 
   return (
     <>
@@ -73,19 +86,20 @@ export default function MembersPanel({ project, permissions }: ProjectPermission
                   size="small"
                   permission="system:project:member"
                   permissions={permissions}
-                  onClick={() => {
-                    setEditing(record);
-                    setOpen(true);
-                  }}
+                  onClick={() => openForm(record)}
                 >
                   {intl.formatMessage({ id: 'members.edit' })}
                 </AuthButton>
                 <Popconfirm
                   title={intl.formatMessage({ id: 'members.removeConfirm' })}
                   onConfirm={async () => {
-                    await deleteProjectMember(project.id, record.userId);
-                    void message.success(intl.formatMessage({ id: 'members.removed' }));
-                    await load();
+                    try {
+                      await deleteProjectMember(project.id, record.userId);
+                      void message.success(intl.formatMessage({ id: 'members.removed' }));
+                      await load();
+                    } catch (error) {
+                      void message.error(error instanceof Error ? error.message : String(error));
+                    }
                   }}
                 >
                   <AuthButton
@@ -109,10 +123,7 @@ export default function MembersPanel({ project, permissions }: ProjectPermission
             type="primary"
             permission="system:project:member"
             permissions={permissions}
-            onClick={() => {
-              setEditing(undefined);
-              setOpen(true);
-            }}
+            onClick={() => openForm()}
           >
             {intl.formatMessage({ id: 'members.add' })}
           </AuthButton>,

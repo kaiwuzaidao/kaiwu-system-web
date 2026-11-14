@@ -8,6 +8,8 @@ import { history, useIntl } from '@umijs/max';
 import { Button, Empty, Input, List, Modal, Space, Tag, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import { globalSearch, type SearchItem } from '@/services/search';
+import LineIcon from '@/components/LineIcon';
+import { kaiwuPalette } from '@/theme/tokens';
 
 const ICONS = {
   PROJECT: <AppstoreOutlined />,
@@ -27,7 +29,13 @@ const LABEL_KEYS = {
  * @param block 侧边栏底部使用的全宽条形态；默认是顶栏用的紧凑图标按钮。
  *              侧边栏只有 216px，图标按钮挤在一行会把用户名压到换行。
  */
-export default function GlobalSearch({ block = false }: { block?: boolean }) {
+export default function GlobalSearch({
+  block = false,
+  active = true,
+}: {
+  block?: boolean;
+  active?: boolean;
+}) {
   const intl = useIntl();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -35,6 +43,10 @@ export default function GlobalSearch({ block = false }: { block?: boolean }) {
   const [items, setItems] = useState<SearchItem[]>([]);
 
   useEffect(() => {
+    if (!active) {
+      setOpen(false);
+      return;
+    }
     const handler = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
@@ -43,7 +55,7 @@ export default function GlobalSearch({ block = false }: { block?: boolean }) {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [active]);
 
   useEffect(() => {
     if (!open || query.trim().length < 2) {
@@ -65,6 +77,7 @@ export default function GlobalSearch({ block = false }: { block?: boolean }) {
     <>
       {block ? (
         <div
+          className="kaiwu-global-search"
           role="button"
           tabIndex={0}
           aria-label={intl.formatMessage({ id: 'layout.search.aria' })}
@@ -83,7 +96,7 @@ export default function GlobalSearch({ block = false }: { block?: boolean }) {
             padding: '0 8px',
             borderRadius: 8,
             cursor: 'pointer',
-            color: 'rgba(0,0,0,0.45)',
+            color: kaiwuPalette.textTertiary,
             fontSize: 13,
             transition: 'background 0.15s ease',
           }}
@@ -94,9 +107,9 @@ export default function GlobalSearch({ block = false }: { block?: boolean }) {
             event.currentTarget.style.background = 'transparent';
           }}
         >
-          <SearchOutlined />
+          <LineIcon name="search" size={15} />
           <span style={{ flex: 1, minWidth: 0 }}>
-            {intl.formatMessage({ id: 'layout.search.short' })}
+            {intl.formatMessage({ id: 'layout.search.jump' })}
           </span>
           <span
             style={{
@@ -104,7 +117,7 @@ export default function GlobalSearch({ block = false }: { block?: boolean }) {
               fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
             }}
           >
-            ⌘K
+            ⌘ K
           </span>
         </div>
       ) : (
@@ -114,7 +127,7 @@ export default function GlobalSearch({ block = false }: { block?: boolean }) {
           onClick={() => setOpen(true)}
           aria-label={intl.formatMessage({ id: 'layout.search.aria' })}
         >
-          <span style={{ color: 'rgba(0,0,0,0.45)', fontSize: 12 }}>⌘K</span>
+          <span style={{ color: kaiwuPalette.textTertiary, fontSize: 12 }}>⌘K</span>
         </Button>
       )}
       <Modal

@@ -1,23 +1,35 @@
+import {
+  AGENT_CAPABILITY_STATUS_DICTIONARY,
+  AGENT_ACTION_STATUS_DICTIONARY,
+  AGENT_REMOTE_ACTION_STATUS_DICTIONARY,
+  AGENT_CAPABILITY_CONNECTION_DICTIONARY,
+} from './agent';
 import type { DictionaryOption } from '@/dictionaries/types';
 import { AI_TEST_STATUS_DICTIONARY } from './ai';
 import { COMMON_BOOLEAN_ENABLED_DICTIONARY, TAG_COLOR_DICTIONARY } from './common';
-import { GITLAB_TEST_STATUS_DICTIONARY } from './gitlab';
 import { MENU_TYPE_DICTIONARY } from './menu';
 import { CONFIG_VALUE_TYPE_DICTIONARY, METADATA_STATUS_DICTIONARY } from './metadata';
 import { NOTIFICATION_TYPE_DICTIONARY } from './notification';
-import { PROJECT_MEMBER_STATUS_DICTIONARY, PROJECT_STATUS_DICTIONARY } from './project';
-import { PROJECT_HEALTH_VERDICT_DICTIONARY } from './projectHealth';
+import {
+  PROJECT_DATA_SCOPE_TYPE_DICTIONARY,
+  PROJECT_HANDOVER_ACTION_DICTIONARY,
+  PROJECT_HANDOVER_RESOURCE_DICTIONARY,
+  PROJECT_HANDOVER_STATUS_DICTIONARY,
+  PROJECT_MEMBER_STATUS_DICTIONARY,
+  PROJECT_STATUS_DICTIONARY,
+} from './project';
 import {
   PROJECT_GENERATION_MODE_DICTIONARY,
   PROJECT_GENERATION_STATUS_DICTIONARY,
-  PROJECT_REPOSITORY_PUSH_STATUS_DICTIONARY,
 } from './projectFactory';
 import {
+  AUDIT_MODULE_DICTIONARY,
   LOGIN_LOG_STATUS_DICTIONARY,
   ONLINE_SESSION_STATUS_DICTIONARY,
-  AUDIT_MODULE_DICTIONARY,
+  SESSION_SOURCE_DICTIONARY,
 } from './security';
 import { SCHEDULER_EXECUTION_STATUS_DICTIONARY } from './scheduler';
+import { STORAGE_BINDING_STATUS_DICTIONARY, STORAGE_PROVIDER_TYPE_DICTIONARY } from './storage';
 import { USER_STATUS_DICTIONARY } from './user';
 
 /**
@@ -28,6 +40,10 @@ import { USER_STATUS_DICTIONARY } from './user';
  * 新增字典时前后端两处必须同批提交。
  */
 export const DICT_FALLBACK: Record<string, DictionaryOption[]> = {
+  'agent.capability.status': AGENT_CAPABILITY_STATUS_DICTIONARY,
+  'agent.action.status': AGENT_ACTION_STATUS_DICTIONARY,
+  'agent.remote_action.status': AGENT_REMOTE_ACTION_STATUS_DICTIONARY,
+  'agent.capability.connection': AGENT_CAPABILITY_CONNECTION_DICTIONARY,
   // V8
   'common.status': METADATA_STATUS_DICTIONARY,
   'common.boolean_enabled': COMMON_BOOLEAN_ENABLED_DICTIONARY,
@@ -40,18 +56,26 @@ export const DICT_FALLBACK: Record<string, DictionaryOption[]> = {
   'platform.menu.type': MENU_TYPE_DICTIONARY,
   'config.value.type': CONFIG_VALUE_TYPE_DICTIONARY,
   'ai.test.status': AI_TEST_STATUS_DICTIONARY,
-  'gitlab.test.status': GITLAB_TEST_STATUS_DICTIONARY,
   'project.generation.mode': PROJECT_GENERATION_MODE_DICTIONARY,
   'project.generation.status': PROJECT_GENERATION_STATUS_DICTIONARY,
-  'project.repository.push.status': PROJECT_REPOSITORY_PUSH_STATUS_DICTIONARY,
   // V18
   'notification.type': NOTIFICATION_TYPE_DICTIONARY,
   // V20
   'security.audit.module': AUDIT_MODULE_DICTIONARY,
   'security.login.status': LOGIN_LOG_STATUS_DICTIONARY,
   'security.session.status': ONLINE_SESSION_STATUS_DICTIONARY,
+  // CLI 设备授权（ADR 0035）
+  'security.session.source': SESSION_SOURCE_DICTIONARY,
   // V22
   'scheduler.execution.status': SCHEDULER_EXECUTION_STATUS_DICTIONARY,
   // 只读项目体检（ADR 0012）
-  'project.health.verdict': PROJECT_HEALTH_VERDICT_DICTIONARY,
+  // V107 对象存储（ADR 0039）
+  'storage.provider.type': STORAGE_PROVIDER_TYPE_DICTIONARY,
+  'storage.binding.status': STORAGE_BINDING_STATUS_DICTIONARY,
+  // V114 配置移交（ADR 0042）
+  'project.handover.status': PROJECT_HANDOVER_STATUS_DICTIONARY,
+  'project.handover.action': PROJECT_HANDOVER_ACTION_DICTIONARY,
+  'project.handover.resource': PROJECT_HANDOVER_RESOURCE_DICTIONARY,
+  // V119 数据范围（ADR 0044）
+  'project.data_scope.type': PROJECT_DATA_SCOPE_TYPE_DICTIONARY,
 };

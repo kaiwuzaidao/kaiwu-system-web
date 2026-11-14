@@ -1,8 +1,10 @@
-import { BellOutlined, CheckOutlined } from '@ant-design/icons';
+import { CheckOutlined } from '@ant-design/icons';
 import { history, useIntl } from '@umijs/max';
-import { Badge, Button, Dropdown, Empty, Spin, Typography } from 'antd';
+import { App, Badge, Button, Dropdown, Empty, Spin, Typography } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 import DictTag from '@/components/DictTag';
+import usePlatformUiPreference from '@/hooks/usePlatformUiPreferences';
+import LineIcon from '@/components/LineIcon';
 import {
   markAllNotificationsRead,
   markNotificationRead,
@@ -12,15 +14,14 @@ import {
 import { useLocaleFormatters } from '@/utils/format';
 import { safeInternalPath } from '@/utils/navigation';
 
-/** 未读数轮询间隔；站内信不是实时通道，60 秒足够且不给后端压力。 */
-const POLL_INTERVAL_MS = 60_000;
-
 /**
  * 站内信入口。
  *
  * @param compact 侧边栏底部使用的紧凑形态（32×32）；默认是顶栏用的 40×44。
  */
 export default function NotificationBell({ compact = false }: { compact?: boolean }) {
+  const { message } = App.useApp();
+  const pollSeconds = usePlatformUiPreference('platform.notification.poll_seconds');
   const intl = useIntl();
   const format = useLocaleFormatters();
   const [unread, setUnread] = useState(0);
@@ -43,24 +44,28 @@ export default function NotificationBell({ compact = false }: { compact?: boolea
 
   useEffect(() => {
     void load();
-    const timer = window.setInterval(() => void load(), POLL_INTERVAL_MS);
+    const timer = window.setInterval(() => void load(), pollSeconds * 1000);
     return () => window.clearInterval(timer);
-  }, [load]);
+  }, [load, pollSeconds]);
 
   const openItem = async (item: Notification) => {
     setOpen(false);
     try {
       await markNotificationRead(item.id);
-    } catch {
-      // 标记失败不影响跳转。
+    } catch (error) {
+      void message.error(error instanceof Error ? error.message : String(error));
     }
     void load();
     history.push(safeInternalPath(item.linkUrl) ?? '/notifications');
   };
 
   const readAll = async () => {
-    await markAllNotificationsRead();
-    await load();
+    try {
+      await markAllNotificationsRead();
+      await load();
+    } catch (error) {
+      void message.error(error instanceof Error ? error.message : String(error));
+    }
   };
 
   return (
@@ -133,7 +138,7 @@ export default function NotificationBell({ compact = false }: { compact?: boolea
                       borderBottom: '1px solid #fafafa',
                     }}
                     onMouseEnter={(event) => {
-                      event.currentTarget.style.background = 'rgba(79,70,229,0.04)';
+                      event.currentTarget.style.background = '#F7FAFC';
                     }}
                     onMouseLeave={(event) => {
                       event.currentTarget.style.background = 'transparent';
@@ -163,7 +168,7 @@ export default function NotificationBell({ compact = false }: { compact?: boolea
                     )}
                     <Typography.Text
                       type="secondary"
-                      style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums' }}
+                      style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}
                     >
                       {format.dateTime(item.createdAt)}
                     </Typography.Text>
@@ -213,14 +218,9 @@ export default function NotificationBell({ compact = false }: { compact?: boolea
           event.currentTarget.style.background = 'transparent';
         }}
       >
-        <Badge
-          count={unread}
-          size="small"
-          overflowCount={99}
-          // 默认 offset 会让红标溢出到容器外，窄侧边栏里显得突兀；向内收一点。
-          offset={compact ? [-2, 2] : undefined}
-        >
-          <BellOutlined style={{ fontSize: 16 }} />
+        {/* V5 顶栏只用圆点提示有未读，具体条数在展开的面板里看。 */}
+        <Badge dot={unread > 0} color="#eb835a" offset={[-3, 3]}>
+          <LineIcon name="bell" size={19} />
         </Badge>
       </div>
     </Dropdown>

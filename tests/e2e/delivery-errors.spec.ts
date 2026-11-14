@@ -74,8 +74,6 @@ test('项目工厂直接展示生成失败原因', async ({ page }) => {
             templateVersion: 'e2e',
             backendFiles: [],
             frontendFiles: [],
-            backendPushStatus: 'NOT_PUSHED',
-            frontendPushStatus: 'NOT_PUSHED',
             lastError,
             completedAt: '2026-07-28T06:24:29',
             createdAt: '2026-07-28T06:24:28',

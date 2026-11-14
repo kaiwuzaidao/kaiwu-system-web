@@ -1,0 +1,59 @@
+@import './theme/typography.less';
+.kaiwu-login {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  background: #fff;
+}
+.kaiwu-login-hero {
+  padding: 56px clamp(32px, 5vw, 88px);
+  overflow: hidden;
+  isolation: isolate;
+}
+.kaiwu-login-hero::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  width: 600px;
+  height: 600px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 50%;
+  top: 8%;
+  left: 50%;
+  box-shadow:
+    0 0 0 70px rgba(255, 255, 255, 0.025),
+    0 0 0 140px rgba(255, 255, 255, 0.02);
+}
+.kaiwu-login-form {
+  min-width: 0;
+  padding: 72px clamp(24px, 4vw, 64px);
+}
+.kaiwu-login-form .ant-pro-form-login-container {
+  padding: 0;
+  height: auto;
+  flex: none;
+}
+@media (max-width: 900px) {
+  .kaiwu-login {
+    grid-template-columns: 1fr;
+  }
+  .kaiwu-login-hero {
+    display: none !important;
+  }
+  .kaiwu-login-form {
+    min-height: 100dvh;
+  }
+  .kaiwu-header-actions {
+    gap: 6px;
+  }
+  .kaiwu-header-action-label {
+    display: none;
+  }
+  .kaiwu-header-action.ant-btn {
+    padding-inline: 10px;
+  }
+}
+
+@import './theme/ant-pro.less';
+@import './theme/business-pages.less';

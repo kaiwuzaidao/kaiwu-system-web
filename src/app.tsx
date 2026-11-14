@@ -1,7 +1,9 @@
 import { history, type RunTimeLayoutConfig } from '@umijs/max';
 import type { MenuDataItem } from '@ant-design/pro-components';
+import AgentDock from '@/components/AgentDock';
+import { proLayoutTokens } from '@/theme/layout';
 import ForcePasswordChange from '@/components/ForcePasswordChange';
-import RightContent from '@/components/RightContent';
+import RightContent, { PlatformBreadcrumb, SidebarFooter } from '@/components/RightContent';
 import { resolveMenuIcon } from '@/constants/menuIcons';
 import {
   hasSession,
@@ -10,6 +12,7 @@ import {
   type NavigationMenu,
 } from '@/services/auth';
 import { currentLocale } from '@/utils/locale';
+import { resolveRuntimeMessage } from '@/i18n/runtime';
 import { navigationMenuActionRef } from '@/utils/navigationMenu';
 import { installProjectAccessBridge } from '@/utils/projectAccessBridge';
 
@@ -33,22 +36,56 @@ function toMenuData(menus: NavigationMenu[]): MenuDataItem[] {
     path: menu.path ?? `/menu/${menu.id}`,
     // 菜单名称已由 System 按用户持久化语言从 menu_name_i18n 解析。
     name: menu.name,
-    icon: resolveMenuIcon(menu.icon),
+    // 分组标题只显示文字（V5 设计）；目录在菜单表里配置的图标不渲染到分组标题上。
+    icon: menu.type === 'DIRECTORY' ? undefined : resolveMenuIcon(menu.icon, menu.path),
     children: menu.children.length > 0 ? toMenuData(menu.children) : undefined,
   }));
 }
 
+/**
+ * 顶层菜单里排在分组之前的独立菜单（工作台、项目管理、消息中心）归入「工作空间」分组，
+ * 让侧栏每一段都有分组标题。只调整展示结构，不改变菜单数据与路由。
+ */
+function groupLeadingMenus(menus: NavigationMenu[]): NavigationMenu[] {
+  const firstDirectory = menus.findIndex((menu) => menu.type === 'DIRECTORY');
+  const title = resolveRuntimeMessage('layout.workspace');
+  if (firstDirectory <= 0 || !title) return menus;
+  return [
+    {
+      id: 'kaiwu-workspace',
+      name: title,
+      type: 'DIRECTORY',
+      children: menus.slice(0, firstDirectory),
+    },
+    ...menus.slice(firstDirectory),
+  ];
+}
+
 export const layout: RunTimeLayoutConfig = () => {
   return {
-    logo: false,
+    logo: (
+      <span className="kaiwu-sidebar-brand-mark" aria-hidden="true">
+        K
+      </span>
+    ),
+    className: 'kaiwu-platform-layout',
+    // Ant Design Pro 原生混合布局，保留已有菜单分组与默认展开策略。
+    navTheme: 'light',
+    layout: 'mix',
+    splitMenus: false,
+    siderWidth: 256,
+    fixedHeader: true,
+    fixSiderbar: true,
+    contentWidth: 'Fluid',
     menu: {
       locale: false,
+      type: 'group',
       // 侧边栏由平台菜单表驱动：菜单名称、图标、排序、分组都在
       // 「项目管理 → system → 权限中心」维护，前端不再保留第二份定义。
       // config.ts 的 routes 只负责路由到组件的映射与面包屑名称。
       request: async () => {
         try {
-          return toMenuData(await queryNavigationMenus());
+          return toMenuData(groupLeadingMenus(await queryNavigationMenus()));
         } catch (reason) {
           // 菜单接口失败时返回空菜单而不是回退到静态定义：
           // 回退会重新引入第二份事实源，且让故障静默。路由本身仍可直接访问。
@@ -59,58 +96,33 @@ export const layout: RunTimeLayoutConfig = () => {
       },
     },
     actionRef: navigationMenuActionRef,
-    menuHeaderRender: (_, title) => (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 4px' }}>
-        <div
-          style={{
-            width: 30,
-            height: 30,
-            borderRadius: 8,
-            background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#fff',
-            fontWeight: 700,
-            fontSize: 15,
-            letterSpacing: 0.4,
-            boxShadow: '0 4px 12px rgba(79,70,229,0.28)',
-          }}
-        >
-          Z
-        </div>
-        {title}
-      </div>
-    ),
+    menuFooterRender: (props) => <SidebarFooter collapsed={Boolean(props?.collapsed)} />,
     rightContentRender: () => <RightContent />,
+    headerHeight: 56,
     // 强制改密弹窗挂在这里：任何页面都能看到，不依赖跳转到个人中心。
     childrenRender: (children) => (
       <>
-        {children}
+        <div className="kaiwu-content-frame">
+          <div className="kaiwu-page-breadcrumb">
+            <PlatformBreadcrumb />
+          </div>
+          {children}
+        </div>
         <ForcePasswordChange />
+        <AgentDock />
       </>
     ),
-    /**
-     * PageContainer 的所有纵向间距都由 paddingBlockPageContainerContent 派生：
-     * 页头上边距 = P/4，标题上边距 = P/4，页头下边距 = P/2，内容区上下 = P/3。
-     * 默认 40 时标题上方会叠出 24(内容区) + 10 + 10 = 44px，明显过高。
-     * 收到 24 后为 16 + 6 + 6 = 28px，标题到内容为 12 + 8 = 20px。
-     *
-     * 只调纵向：paddingInline 不设置，保持页头标题与下方卡片左对齐。
-     */
-    token: {
-      pageContainer: {
-        paddingBlockPageContainerContent: 24,
-      },
-    },
-    contentStyle: {
-      // 顶部收紧，左右与底部保持规范的 24 页边距。
-      padding: '16px 24px 24px',
-      background: '#f5f6fa',
-    },
+    token: proLayoutTokens,
+    contentStyle: { padding: 0 },
     onPageChange: () => {
       const path = history.location.pathname;
       if (path !== '/login' && !hasSession()) {
+        // 设备授权确认页由命令行链接直接打开，登录后要回到原链接，短码才不会丢。
+        if (path === '/device') {
+          const target = `${path}${history.location.search}`;
+          history.replace(`/login?redirect=${encodeURIComponent(target)}`);
+          return;
+        }
         history.replace('/login');
         return;
       }

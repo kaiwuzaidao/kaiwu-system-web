@@ -1,25 +1,15 @@
+import usePlatformUiPreference from '@/hooks/usePlatformUiPreferences';
 import {
   CheckCircleFilled,
   CloseCircleFilled,
   CloudDownloadOutlined,
-  CloudUploadOutlined,
-  CodeOutlined,
   EditOutlined,
-  ExclamationCircleFilled,
   FieldTimeOutlined,
-  GitlabOutlined,
-  LinkOutlined,
   ReloadOutlined,
   RocketOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons';
-import {
-  ModalForm,
-  PageContainer,
-  ProCard,
-  ProFormText,
-  ProFormTextArea,
-} from '@ant-design/pro-components';
+import { ModalForm, PageContainer, ProCard } from '@ant-design/pro-components';
 import { history, useIntl } from '@umijs/max';
 import {
   Alert,
@@ -28,7 +18,6 @@ import {
   Card,
   Col,
   Descriptions,
-  Divider,
   Empty,
   List,
   Modal,
@@ -37,27 +26,23 @@ import {
   Space,
   Table,
   Tabs,
-  Tag,
   Tooltip,
   Typography,
 } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import AuthButton from '@/components/AuthButton';
 import DictTag from '@/components/DictTag';
-import LocalAiCodingModal from '@/components/LocalAiCodingModal';
 import { currentUserSnapshot } from '@/services/auth';
 import {
-  canStartLocalAiCoding,
   downloadProjectArtifact,
-  pushProjectGeneration,
   queryProjectGenerationInput,
   queryProjectGenerations,
   retryProjectGeneration,
   type ProjectGeneration,
   type ProjectGenerationEditableInput,
-  type ProjectGenerationPushInput,
   type ProjectGenerationRetryInput,
 } from '@/services/projectFactory';
+import { kaiwuPalette } from '@/theme/tokens';
 import { useLocaleFormatters } from '@/utils/format';
 
 type StatTone = 'primary' | 'success' | 'error' | 'warning' | 'default';
@@ -67,22 +52,19 @@ function deliveryReadiness(task: ProjectGeneration) {
     task.status === 'SUCCESS',
     task.backendFiles.length > 0,
     task.frontendFiles.length > 0,
-    task.backendPushStatus === 'PUSHED',
-    task.frontendPushStatus === 'PUSHED',
   ].filter(Boolean).length;
 }
 
 export default function ProjectFactoryPage() {
+  const pollSeconds = usePlatformUiPreference('platform.factory.poll_seconds');
   const { message } = App.useApp();
   const intl = useIntl();
   const format = useLocaleFormatters();
   const permissions = currentUserSnapshot()?.permissions ?? [];
   const [tasks, setTasks] = useState<ProjectGeneration[]>([]);
-  const [pushTask, setPushTask] = useState<ProjectGeneration>();
   const [retryTask, setRetryTask] = useState<ProjectGeneration>();
   const [retryInput, setRetryInput] = useState<ProjectGenerationEditableInput>();
   const [preview, setPreview] = useState<ProjectGeneration>();
-  const [localCodingTask, setLocalCodingTask] = useState<ProjectGeneration>();
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
@@ -99,18 +81,15 @@ export default function ProjectFactoryPage() {
   }, [load, message]);
 
   useEffect(() => {
-    const active = tasks.some(
-      (task) =>
-        ['PENDING', 'RUNNING'].includes(task.status) ||
-        task.backendPushStatus === 'PUSHING' ||
-        task.frontendPushStatus === 'PUSHING',
-    );
+    const active = tasks.some((task) => ['PENDING', 'RUNNING'].includes(task.status));
     if (!active) return undefined;
     const timer = window.setInterval(() => {
-      void load();
-    }, 2500);
+      void load().catch(() => {
+        /* 自动轮询失败时保留现有结果，用户可手动刷新。 */
+      });
+    }, pollSeconds * 1000);
     return () => window.clearInterval(timer);
-  }, [load, tasks]);
+  }, [load, tasks, pollSeconds]);
 
   const stats = useMemo(() => {
     const total = tasks.length;
@@ -119,12 +98,7 @@ export default function ProjectFactoryPage() {
     ).length;
     const success = tasks.filter((task) => task.status === 'SUCCESS').length;
     const failed = tasks.filter((task) => task.status === 'FAILED').length;
-    const pending = tasks.filter(
-      (task) =>
-        task.status === 'SUCCESS' &&
-        !(task.backendPushStatus === 'PUSHED' && task.frontendPushStatus === 'PUSHED'),
-    ).length;
-    return { total, running, success, failed, pending };
+    return { total, running, success, failed };
   }, [tasks]);
 
   return (
@@ -143,16 +117,13 @@ export default function ProjectFactoryPage() {
           key="refresh"
           icon={<ReloadOutlined />}
           loading={loading}
-          onClick={() => void load()}
+          onClick={() =>
+            void load().catch((error) =>
+              message.error(error instanceof Error ? error.message : String(error)),
+            )
+          }
         >
           {intl.formatMessage({ id: 'factory.refresh' })}
-        </Button>,
-        <Button
-          key="gitlab"
-          icon={<GitlabOutlined />}
-          onClick={() => history.push('/gitlab-config')}
-        >
-          {intl.formatMessage({ id: 'factory.gitlab' })}
         </Button>,
         <Button
           key="new"
@@ -187,11 +158,7 @@ export default function ProjectFactoryPage() {
           <StatCard
             label={intl.formatMessage({ id: 'factory.stat.success' })}
             value={stats.success}
-            hint={
-              stats.pending > 0
-                ? intl.formatMessage({ id: 'factory.stat.pendingPush' }, { count: stats.pending })
-                : intl.formatMessage({ id: 'factory.stat.ready' })
-            }
+            hint={intl.formatMessage({ id: 'factory.stat.ready' })}
             tone="success"
             icon={<CheckCircleFilled />}
           />
@@ -226,7 +193,7 @@ export default function ProjectFactoryPage() {
           rowKey="taskNo"
           dataSource={tasks}
           loading={loading}
-          scroll={{ x: 1570 }}
+          scroll={{ x: 1370 }}
           pagination={{ pageSize: 10, showSizeChanger: false }}
           locale={{
             emptyText: (
@@ -301,30 +268,12 @@ export default function ProjectFactoryPage() {
               render: (_, task) => (
                 <Tooltip title={intl.formatMessage({ id: 'factory.readiness.tooltip' })}>
                   <Progress
-                    percent={deliveryReadiness(task) * 20}
+                    percent={Math.round((deliveryReadiness(task) / 3) * 100)}
                     size="small"
-                    strokeColor="#4f46e5"
+                    strokeColor="#3B82F6"
                     status={task.status === 'FAILED' ? 'exception' : 'normal'}
                   />
                 </Tooltip>
-              ),
-            },
-            {
-              title: intl.formatMessage({ id: 'factory.column.repositories' }),
-              width: 200,
-              render: (_, task) => (
-                <Space direction="vertical" size={4}>
-                  <RepoPushCell
-                    label={intl.formatMessage({ id: 'factory.repository.backend' })}
-                    status={task.backendPushStatus}
-                    url={task.backendRepositoryUrl}
-                  />
-                  <RepoPushCell
-                    label={intl.formatMessage({ id: 'factory.repository.frontend' })}
-                    status={task.frontendPushStatus}
-                    url={task.frontendRepositoryUrl}
-                  />
-                </Space>
               ),
             },
             {
@@ -355,7 +304,11 @@ export default function ProjectFactoryPage() {
                     permission="system:project-factory:download"
                     permissions={permissions}
                     disabled={task.status !== 'SUCCESS'}
-                    onClick={() => void downloadProjectArtifact(task, 'BACKEND')}
+                    onClick={() =>
+                      void downloadProjectArtifact(task, 'BACKEND').catch((error) =>
+                        message.error(error instanceof Error ? error.message : String(error)),
+                      )
+                    }
                   >
                     {intl.formatMessage({ id: 'factory.action.backendZip' })}
                   </AuthButton>
@@ -366,11 +319,15 @@ export default function ProjectFactoryPage() {
                     permission="system:project-factory:download"
                     permissions={permissions}
                     disabled={task.status !== 'SUCCESS'}
-                    onClick={() => void downloadProjectArtifact(task, 'FRONTEND')}
+                    onClick={() =>
+                      void downloadProjectArtifact(task, 'FRONTEND').catch((error) =>
+                        message.error(error instanceof Error ? error.message : String(error)),
+                      )
+                    }
                   >
                     {intl.formatMessage({ id: 'factory.action.frontendZip' })}
                   </AuthButton>
-                  {task.status === 'FAILED' && (
+                  {task.status === 'FAILED' && task.generationMode === 'BASIC_SCAFFOLD' && (
                     <AuthButton
                       type="link"
                       size="small"
@@ -378,42 +335,19 @@ export default function ProjectFactoryPage() {
                       permission="system:project-factory:generate"
                       permissions={permissions}
                       onClick={async () => {
-                        const input = await queryProjectGenerationInput(task.taskNo);
-                        setRetryInput(input);
-                        setRetryTask(task);
+                        try {
+                          const input = await queryProjectGenerationInput(task.taskNo);
+                          setRetryInput(input);
+                          setRetryTask(task);
+                        } catch (error) {
+                          void message.error(
+                            error instanceof Error ? error.message : String(error),
+                          );
+                        }
                       }}
                     >
                       {intl.formatMessage({ id: 'factory.action.retry' })}
                     </AuthButton>
-                  )}
-                  {task.status === 'SUCCESS' &&
-                    !(
-                      task.backendPushStatus === 'PUSHED' && task.frontendPushStatus === 'PUSHED'
-                    ) && (
-                      <AuthButton
-                        type="link"
-                        size="small"
-                        icon={<CloudUploadOutlined />}
-                        permission="system:project-factory:push"
-                        permissions={permissions}
-                        disabled={
-                          task.backendPushStatus === 'PUSHING' ||
-                          task.frontendPushStatus === 'PUSHING'
-                        }
-                        onClick={() => setPushTask(task)}
-                      >
-                        {intl.formatMessage({ id: 'factory.action.push' })}
-                      </AuthButton>
-                    )}
-                  {canStartLocalAiCoding(task) && (
-                    <Button
-                      type="link"
-                      size="small"
-                      icon={<CodeOutlined />}
-                      onClick={() => setLocalCodingTask(task)}
-                    >
-                      {intl.formatMessage({ id: 'projects.localAiCoding' })}
-                    </Button>
                   )}
                 </Space>
               ),
@@ -421,62 +355,6 @@ export default function ProjectFactoryPage() {
           ]}
         />
       </ProCard>
-
-      <ModalForm<ProjectGenerationPushInput>
-        title={intl.formatMessage(
-          { id: 'factory.push.title' },
-          { project: pushTask?.projectName ?? '' },
-        )}
-        open={Boolean(pushTask)}
-        onOpenChange={(open) => {
-          if (!open) setPushTask(undefined);
-        }}
-        modalProps={{ destroyOnHidden: true }}
-        submitter={{
-          searchConfig: { submitText: intl.formatMessage({ id: 'factory.push.submit' }) },
-        }}
-        onFinish={async (values) => {
-          try {
-            if (!pushTask) return false;
-            await pushProjectGeneration(pushTask.taskNo, values);
-            void message.success(intl.formatMessage({ id: 'factory.push.success' }));
-            setPushTask(undefined);
-            await load();
-            return true;
-          } catch (error) {
-            // ProForm 会吞掉 onFinish 的异常，必须在此显式提示，否则表单静默失败。
-            void message.error(error instanceof Error ? error.message : String(error));
-            return false;
-          }
-        }}
-      >
-        <Alert
-          showIcon
-          type="info"
-          style={{ marginBottom: 16 }}
-          message={intl.formatMessage({ id: 'factory.push.alertTitle' })}
-          description={intl.formatMessage({ id: 'factory.push.alertDescription' })}
-        />
-        <ProFormText
-          colProps={{ span: 12 }}
-          name="groupId"
-          label={intl.formatMessage({ id: 'factory.push.group' })}
-          placeholder={intl.formatMessage({ id: 'factory.push.groupPlaceholder' })}
-        />
-        <Divider plain>{intl.formatMessage({ id: 'factory.push.orExisting' })}</Divider>
-        <ProFormText
-          colProps={{ span: 12 }}
-          name="backendRepositoryUrl"
-          label={intl.formatMessage({ id: 'factory.push.backendUrl' })}
-          placeholder={intl.formatMessage({ id: 'factory.push.backendUrlPlaceholder' })}
-        />
-        <ProFormText
-          colProps={{ span: 12 }}
-          name="frontendRepositoryUrl"
-          label={intl.formatMessage({ id: 'factory.push.frontendUrl' })}
-          placeholder={intl.formatMessage({ id: 'factory.push.frontendUrlPlaceholder' })}
-        />
-      </ModalForm>
 
       <ModalForm<ProjectGenerationRetryInput>
         grid
@@ -522,36 +400,7 @@ export default function ProjectFactoryPage() {
           message={retryTask?.lastError || intl.formatMessage({ id: 'factory.retry.lastFailed' })}
           description={intl.formatMessage({ id: 'factory.retry.description' })}
         />
-        {retryInput?.generationMode === 'AI_PROJECT' ? (
-          <>
-            <ProFormTextArea
-              colProps={{ span: 24 }}
-              name="businessDescription"
-              label={intl.formatMessage({ id: 'factory.retry.businessDescription' })}
-              fieldProps={{ rows: 5, maxLength: 10000, showCount: true }}
-              rules={[
-                {
-                  required: true,
-                  message: intl.formatMessage({ id: 'factory.retry.businessRequired' }),
-                },
-              ]}
-            />
-            <ProFormTextArea
-              colProps={{ span: 24 }}
-              name="ddl"
-              label={intl.formatMessage({ id: 'factory.retry.ddl' })}
-              fieldProps={{
-                rows: 16,
-                style: {
-                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                },
-              }}
-              extra={intl.formatMessage({ id: 'factory.retry.ddlExtra' })}
-            />
-          </>
-        ) : (
-          <Alert showIcon type="info" message={intl.formatMessage({ id: 'factory.retry.basic' })} />
-        )}
+        <Alert showIcon type="info" message={intl.formatMessage({ id: 'factory.retry.basic' })} />
       </ModalForm>
 
       <Modal
@@ -655,7 +504,6 @@ export default function ProjectFactoryPage() {
           </>
         )}
       </Modal>
-      <LocalAiCodingModal task={localCodingTask} onClose={() => setLocalCodingTask(undefined)} />
     </PageContainer>
   );
 }
@@ -674,13 +522,13 @@ function StatCard({
   icon: React.ReactNode;
 }) {
   const toneMap: Record<StatTone, { bg: string; fg: string; bar: string }> = {
-    primary: { bg: 'rgba(79,70,229,0.10)', fg: '#4f46e5', bar: '#4f46e5' },
+    primary: { bg: kaiwuPalette.primarySoft, fg: kaiwuPalette.primary, bar: kaiwuPalette.primary },
     success: { bg: 'rgba(82,196,26,0.12)', fg: '#389e0d', bar: '#52c41a' },
     warning: { bg: 'rgba(250,173,20,0.14)', fg: '#d48806', bar: '#faad14' },
     error: { bg: 'rgba(255,77,79,0.12)', fg: '#cf1322', bar: '#ff4d4f' },
     default: {
       bg: 'rgba(0,0,0,0.04)',
-      fg: 'rgba(0,0,0,0.45)',
+      fg: kaiwuPalette.textTertiary,
       bar: 'rgba(0,0,0,0.12)',
     },
   };
@@ -718,7 +566,7 @@ function StatCard({
           <div
             style={{
               fontSize: 12,
-              color: 'rgba(0,0,0,0.45)',
+              color: kaiwuPalette.textTertiary,
               lineHeight: 1.2,
             }}
           >
@@ -731,7 +579,7 @@ function StatCard({
               lineHeight: 1.15,
               marginTop: 8,
               fontVariantNumeric: 'tabular-nums',
-              color: 'rgba(0,0,0,0.88)',
+              color: kaiwuPalette.text,
             }}
           >
             {value}
@@ -740,7 +588,7 @@ function StatCard({
             <div
               style={{
                 fontSize: 12,
-                color: 'rgba(0,0,0,0.45)',
+                color: kaiwuPalette.textTertiary,
                 marginTop: 8,
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
@@ -772,37 +620,6 @@ function StatCard({
   );
 }
 
-function RepoPushCell({ label, status, url }: { label: string; status?: string; url?: string }) {
-  const intl = useIntl();
-  const failed = status === 'FAILED';
-  return (
-    <Space size={6} align="center">
-      <Typography.Text
-        type="secondary"
-        style={{ fontSize: 12, width: 28, display: 'inline-block' }}
-      >
-        {label}
-      </Typography.Text>
-      <DictTag dictCode="project.repository.push.status" value={status} />
-      {url ? (
-        <a
-          href={url}
-          target="_blank"
-          rel="noreferrer"
-          style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 2 }}
-        >
-          <LinkOutlined />
-          {intl.formatMessage({ id: 'factory.repository.link' })}
-        </a>
-      ) : failed ? (
-        <Tag icon={<ExclamationCircleFilled />} color="error" style={{ margin: 0 }}>
-          {intl.formatMessage({ id: 'factory.repository.retry' })}
-        </Tag>
-      ) : null}
-    </Space>
-  );
-}
-
 function FileList({ files }: { files: string[] }) {
   const intl = useIntl();
   if (files.length === 0) {
@@ -824,7 +641,7 @@ function FileList({ files }: { files: string[] }) {
             style={{
               fontSize: 12,
               fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-              color: 'rgba(0,0,0,0.75)',
+              color: kaiwuPalette.textSecondary,
             }}
           >
             {file}

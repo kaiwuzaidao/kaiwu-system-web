@@ -32,8 +32,8 @@ export default function NotificationsPage() {
     if (!item.readAt) {
       try {
         await markNotificationRead(item.id);
-      } catch {
-        // 标记失败不影响跳转。
+      } catch (error) {
+        void message.error(error instanceof Error ? error.message : String(error));
       }
     }
     const target = safeInternalPath(item.linkUrl);
@@ -55,9 +55,15 @@ export default function NotificationsPage() {
       title: intl.formatMessage({ id: 'notifications.message' }),
       render: (_, row) => (
         <Space direction="vertical" size={0}>
-          <Typography.Text strong={!row.readAt}>{row.title}</Typography.Text>
+          <Typography.Text strong={!row.readAt} ellipsis={{ tooltip: row.title }}>
+            {row.title}
+          </Typography.Text>
           {row.content && (
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            <Typography.Text
+              type="secondary"
+              ellipsis={{ tooltip: row.content }}
+              style={{ fontSize: 12 }}
+            >
               {row.content}
             </Typography.Text>
           )}
@@ -93,7 +99,7 @@ export default function NotificationsPage() {
             {intl.formatMessage({ id: 'notifications.read' })}
           </Typography.Text>
         ) : (
-          <Typography.Text style={{ fontSize: 12, color: '#4f46e5' }}>
+          <Typography.Text style={{ fontSize: 12, color: '#3B82F6' }}>
             {intl.formatMessage({ id: 'notifications.unread' })}
           </Typography.Text>
         ),
@@ -129,6 +135,7 @@ export default function NotificationsPage() {
     >
       <ProTable<Notification>
         sticky
+        scroll={{ x: 850 }}
         rowKey="id"
         actionRef={actionRef}
         columns={columns}
@@ -192,13 +199,17 @@ export default function NotificationsPage() {
             key="read-all"
             icon={<CheckOutlined />}
             onClick={async () => {
-              const count = await markAllNotificationsRead();
-              void message.success(
-                count > 0
-                  ? intl.formatMessage({ id: 'notifications.markedCount' }, { count })
-                  : intl.formatMessage({ id: 'notifications.noUnread' }),
-              );
-              actionRef.current?.reload();
+              try {
+                const count = await markAllNotificationsRead();
+                void message.success(
+                  count > 0
+                    ? intl.formatMessage({ id: 'notifications.markedCount' }, { count })
+                    : intl.formatMessage({ id: 'notifications.noUnread' }),
+                );
+                actionRef.current?.reload();
+              } catch (error) {
+                void message.error(error instanceof Error ? error.message : String(error));
+              }
             }}
           >
             {intl.formatMessage({ id: 'notifications.markAll' })}

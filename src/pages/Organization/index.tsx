@@ -1,12 +1,22 @@
-import { DeleteOutlined, EditOutlined, PlusOutlined, TeamOutlined } from '@ant-design/icons';
+import {
+  ApartmentOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  PlusOutlined,
+  TeamOutlined,
+} from '@ant-design/icons';
 import { PageContainer, ProCard } from '@ant-design/pro-components';
 import {
   App,
+  Avatar,
   Button,
+  Empty,
   Form,
+  Grid,
   Input,
   InputNumber,
   Modal,
+  Pagination,
   Popconfirm,
   Select,
   Space,
@@ -24,6 +34,7 @@ import { useDict } from '@/hooks/useDict';
 import { currentUserSnapshot } from '@/services/auth';
 import {
   assignUserDepartments,
+  addDepartmentMembers,
   deleteDepartment,
   queryDepartments,
   queryUserDepartmentMappings,
@@ -32,6 +43,8 @@ import {
   type DepartmentInput,
 } from '@/services/org';
 import { queryUsers, type PlatformUser } from '@/services/users';
+import './dialogs.less';
+import './index.less';
 
 function flatten(items: Department[]): Department[] {
   return items.flatMap((item) => [item, ...flatten(item.children ?? [])]);
@@ -40,6 +53,7 @@ function flatten(items: Department[]): Department[] {
 export default function OrganizationPage() {
   const { message } = App.useApp();
   const intl = useIntl();
+  const screens = Grid.useBreakpoint();
   const permissions = currentUserSnapshot()?.permissions ?? [];
   // 部门启停状态复用通用字典 common.status，不在页面内维护映射。
   const { options: statusOptions } = useDict('common.status');
@@ -54,6 +68,15 @@ export default function OrganizationPage() {
   const [primaryDepartmentId, setPrimaryDepartmentId] = useState<string>();
   const [additionalDepartmentIds, setAdditionalDepartmentIds] = useState<string[]>([]);
   const [assigningSaving, setAssigningSaving] = useState(false);
+  const [bulkDepartment, setBulkDepartment] = useState<Department>();
+  const [bulkIds, setBulkIds] = useState<string[]>([]);
+  const [bulkKeyword, setBulkKeyword] = useState('');
+  const [bulkSearch, setBulkSearch] = useState('');
+  const [bulkPage, setBulkPage] = useState(1);
+  const [bulkUsers, setBulkUsers] = useState<PlatformUser[]>([]);
+  const [bulkTotal, setBulkTotal] = useState(0);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkSaving, setBulkSaving] = useState(false);
   const [form] = Form.useForm<DepartmentInput>();
 
   const allDepartments = useMemo(() => flatten(departments), [departments]);
@@ -105,6 +128,34 @@ export default function OrganizationPage() {
     });
   }, []);
 
+  useEffect(() => {
+    if (!bulkDepartment) return;
+    let active = true;
+    setBulkLoading(true);
+    void queryUsers({ current: bulkPage, pageSize: 10, keyword: bulkSearch })
+      .then((page) => {
+        if (active) {
+          setBulkUsers(page.records);
+          setBulkTotal(page.total);
+        }
+      })
+      .catch((reason) => {
+        if (active) {
+          setBulkUsers([]);
+          setBulkTotal(0);
+          void message.error(
+            reason instanceof Error ? reason.message : intl.formatMessage({ id: 'org.loadFailed' }),
+          );
+        }
+      })
+      .finally(() => {
+        if (active) setBulkLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [bulkDepartment, bulkPage, bulkSearch]);
+
   const openEditor = (input: Partial<DepartmentInput>) => {
     setEditing(input);
     form.setFieldsValue({
@@ -123,6 +174,7 @@ export default function OrganizationPage() {
 
   return (
     <PageContainer
+      className="kaiwu-organization-page"
       title={intl.formatMessage({ id: 'org.title' })}
       subTitle={intl.formatMessage({ id: 'org.subtitle' })}
       extra={[
@@ -138,39 +190,52 @@ export default function OrganizationPage() {
         </AuthButton>,
       ]}
     >
-      <ProCard split="vertical" bordered>
+      <ProCard
+        className="kaiwu-organization"
+        split={screens.md === false ? 'horizontal' : 'vertical'}
+        bordered
+      >
         <ProCard
+          className="kaiwu-organization-tree"
           title={intl.formatMessage({ id: 'org.tree' })}
           subTitle={intl.formatMessage({ id: 'org.treeHint' })}
-          colSpan="34%"
+          colSpan={screens.md === false ? '100%' : '34%'}
         >
-          <Tree
-            blockNode
-            defaultExpandAll
-            selectedKeys={selectedId ? [selectedId] : []}
-            onSelect={(keys) => setSelectedId(keys[0]?.toString())}
-            treeData={departments.map(function mapDepartment(item): DataNode {
-              return {
-                key: item.id,
-                title: (
-                  <Space>
-                    <span>{item.name}</span>
-                    <Typography.Text type="secondary">{item.code}</Typography.Text>
-                    <Tag bordered={false}>
-                      {intl.formatMessage(
-                        { id: 'org.peopleCount' },
-                        { count: departmentUserCounts.get(item.id) ?? 0 },
-                      )}
-                    </Tag>
-                  </Space>
-                ),
-                children: (item.children ?? []).map(mapDepartment),
-              };
-            })}
-          />
+          {departments.length > 0 && (
+            <Tree
+              blockNode
+              showIcon
+              icon={<ApartmentOutlined />}
+              defaultExpandAll
+              selectedKeys={selectedId ? [selectedId] : []}
+              onSelect={(keys) => setSelectedId(keys[0]?.toString())}
+              treeData={departments.map(function mapDepartment(item): DataNode {
+                return {
+                  key: item.id,
+                  title: (
+                    <Space size={8} className="kaiwu-organization-node">
+                      <Typography.Text strong title={`${item.name} · ${item.code}`}>
+                        {item.name}
+                      </Typography.Text>
+                      <Typography.Text type="secondary">{item.code}</Typography.Text>
+                      <Tag bordered={false} icon={<TeamOutlined />}>
+                        {intl.formatMessage(
+                          { id: 'org.peopleCount' },
+                          { count: departmentUserCounts.get(item.id) ?? 0 },
+                        )}
+                      </Tag>
+                    </Space>
+                  ),
+                  children: (item.children ?? []).map(mapDepartment),
+                };
+              })}
+            />
+          )}
           {selected && (
-            <Space style={{ marginTop: 20 }}>
+            <Space style={{ marginTop: 16 }}>
               <AuthButton
+                type="text"
+                size="small"
                 icon={<EditOutlined />}
                 permission="system:org:save"
                 permissions={permissions}
@@ -182,13 +247,19 @@ export default function OrganizationPage() {
                 title={intl.formatMessage({ id: 'org.deleteConfirm' })}
                 description={intl.formatMessage({ id: 'org.deleteHint' })}
                 onConfirm={async () => {
-                  await deleteDepartment(selected.id);
-                  setSelectedId(undefined);
-                  void message.success(intl.formatMessage({ id: 'org.deleted' }));
-                  await reload();
+                  try {
+                    await deleteDepartment(selected.id);
+                    setSelectedId(undefined);
+                    void message.success(intl.formatMessage({ id: 'org.deleted' }));
+                    await reload();
+                  } catch (error) {
+                    void message.error(error instanceof Error ? error.message : String(error));
+                  }
                 }}
               >
                 <AuthButton
+                  type="text"
+                  size="small"
                   danger
                   icon={<DeleteOutlined />}
                   permission="system:org:delete"
@@ -201,12 +272,30 @@ export default function OrganizationPage() {
           )}
         </ProCard>
         <ProCard
+          className="kaiwu-organization-members"
           title={intl.formatMessage(
             { id: 'org.userMembership' },
             { scope: selected?.name ?? intl.formatMessage({ id: 'org.allUsers' }) },
           )}
           extra={
-            <Space>
+            <Space wrap>
+              {selected && (
+                <AuthButton
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  permission="system:org:assign"
+                  permissions={permissions}
+                  onClick={() => {
+                    setBulkIds([]);
+                    setBulkKeyword('');
+                    setBulkSearch('');
+                    setBulkPage(1);
+                    setBulkDepartment(selected);
+                  }}
+                >
+                  {intl.formatMessage({ id: 'org.bulkAdd' })}
+                </AuthButton>
+              )}
               <Input.Search
                 allowClear
                 placeholder={intl.formatMessage({ id: 'org.searchUsers' })}
@@ -215,7 +304,7 @@ export default function OrganizationPage() {
                 style={{ width: 220 }}
               />
               {selectedId && (
-                <Button onClick={() => setSelectedId(undefined)}>
+                <Button icon={<TeamOutlined />} onClick={() => setSelectedId(undefined)}>
                   {intl.formatMessage({ id: 'org.viewAll' })}
                 </Button>
               )}
@@ -223,7 +312,9 @@ export default function OrganizationPage() {
           }
         >
           <Table<PlatformUser>
+            className="kaiwu-organization-table"
             sticky
+            scroll={{ x: 620 }}
             rowKey="id"
             size="middle"
             loading={loading}
@@ -236,9 +327,14 @@ export default function OrganizationPage() {
               {
                 title: intl.formatMessage({ id: 'org.user' }),
                 render: (_, user) => (
-                  <Space direction="vertical" size={0}>
-                    <Typography.Text strong>{user.displayName}</Typography.Text>
-                    <Typography.Text type="secondary">@{user.username}</Typography.Text>
+                  <Space size={14}>
+                    <Avatar className="kaiwu-organization-avatar" aria-hidden="true">
+                      {(user.displayName || user.username).trim().charAt(0).toUpperCase()}
+                    </Avatar>
+                    <Space direction="vertical" size={0}>
+                      <Typography.Text strong>{user.displayName}</Typography.Text>
+                      <Typography.Text type="secondary">@{user.username}</Typography.Text>
+                    </Space>
                   </Space>
                 ),
               },
@@ -292,6 +388,113 @@ export default function OrganizationPage() {
           />
         </ProCard>
       </ProCard>
+
+      <Modal
+        title={intl.formatMessage({ id: 'org.bulkTitle' }, { name: bulkDepartment?.name ?? '' })}
+        width={700}
+        centered
+        className="kaiwu-org-dialog"
+        open={Boolean(bulkDepartment)}
+        confirmLoading={bulkSaving}
+        okButtonProps={{ disabled: bulkIds.length === 0 }}
+        onCancel={() => {
+          if (!bulkSaving) setBulkDepartment(undefined);
+        }}
+        onOk={async () => {
+          if (!bulkDepartment || bulkSaving || !bulkIds.length) return;
+          setBulkSaving(true);
+          try {
+            const count = await addDepartmentMembers(bulkDepartment.id, bulkIds);
+            setBulkDepartment(undefined);
+            void message.success(intl.formatMessage({ id: 'org.bulkAdded' }, { count }));
+            await reload().catch(() => {
+              void message.error(intl.formatMessage({ id: 'org.loadFailed' }));
+            });
+          } catch (reason) {
+            void message.error(
+              reason instanceof Error
+                ? reason.message
+                : intl.formatMessage({ id: 'org.assignmentFailed' }),
+            );
+          } finally {
+            setBulkSaving(false);
+          }
+        }}
+      >
+        <Typography.Paragraph type="secondary">
+          {intl.formatMessage({ id: 'org.bulkHint' })}
+        </Typography.Paragraph>
+        <Input.Search
+          allowClear
+          aria-label={intl.formatMessage({ id: 'org.searchUsers' })}
+          value={bulkKeyword}
+          placeholder={intl.formatMessage({ id: 'org.searchUsers' })}
+          onChange={(event) => setBulkKeyword(event.target.value)}
+          onSearch={(value) => {
+            setBulkPage(1);
+            setBulkSearch(value.trim());
+          }}
+        />
+        <Table<PlatformUser>
+          className="kaiwu-org-member-table"
+          rowKey="id"
+          size="small"
+          loading={bulkLoading}
+          dataSource={bulkUsers}
+          scroll={{ y: 305 }}
+          locale={{
+            emptyText: (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={
+                  bulkSearch ? intl.formatMessage({ id: 'layout.search.empty' }) : undefined
+                }
+              />
+            ),
+          }}
+          rowSelection={{
+            selectedRowKeys: bulkIds,
+            preserveSelectedRowKeys: true,
+            columnTitle: (checkbox) => (
+              <Space size={6}>
+                {checkbox}
+                <Typography.Text type="secondary">
+                  {intl.formatMessage({ id: 'layout.project.openMode.inline' })}
+                </Typography.Text>
+              </Space>
+            ),
+            columnWidth: 116,
+            onChange: (keys) => setBulkIds(keys.map(String).slice(0, 100)),
+            getCheckboxProps: (user) => ({
+              disabled: !bulkIds.includes(user.id) && bulkIds.length >= 100,
+            }),
+          }}
+          pagination={false}
+          columns={[
+            {
+              title: intl.formatMessage({ id: 'org.user' }),
+              render: (_, user) => (
+                <Space direction="vertical" size={0}>
+                  <Typography.Text strong>{user.displayName || user.username}</Typography.Text>
+                  <Typography.Text type="secondary">@{user.username}</Typography.Text>
+                </Space>
+              ),
+            },
+          ]}
+        />
+        <div className="kaiwu-org-dialog-pagination">
+          <Typography.Text type={bulkIds.length >= 100 ? 'warning' : 'secondary'}>
+            {intl.formatMessage({ id: 'org.bulkSelected' }, { count: bulkIds.length })}
+          </Typography.Text>
+          <Pagination
+            current={bulkPage}
+            pageSize={10}
+            total={bulkTotal}
+            showSizeChanger={false}
+            onChange={setBulkPage}
+          />
+        </div>
+      </Modal>
 
       <Modal
         title={intl.formatMessage({ id: editing?.id ? 'org.editTitle' : 'org.createTitle' })}
@@ -370,6 +573,9 @@ export default function OrganizationPage() {
           { id: 'org.assignTitle' },
           { name: assigning?.displayName ?? '' },
         )}
+        width={560}
+        centered
+        className="kaiwu-org-dialog"
         open={Boolean(assigning)}
         confirmLoading={assigningSaving}
         onCancel={() => {

@@ -16,6 +16,12 @@ export const ONLINE_SESSION_STATUS_DICTIONARY: DictionaryOption[] = [
   { value: 'REVOKED', label: '已撤销', color: 'default' },
 ];
 
+/** 在线会话的签发方式，对应后端 `security.session.source`（V101，ADR 0035）。 */
+export const SESSION_SOURCE_DICTIONARY: DictionaryOption[] = [
+  { value: 'WEB', label: '网页登录', color: 'default' },
+  { value: 'CLI', label: 'CLI 授权', color: 'purple' },
+];
+
 /**
  * 操作审计的来源模块，对应后端 `security.audit.module`（V35）。
  *

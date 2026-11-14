@@ -13,11 +13,12 @@ import {
   Alert,
   App,
   Button,
+  Col,
   Form,
   Input,
   Popconfirm,
-  Radio,
   Result,
+  Row,
   Select,
   Space,
   Steps,
@@ -46,10 +47,26 @@ type WizardValues = {
   packageName: string;
   description?: string;
   memberIds?: string[];
-  generationMode: 'AI_PROJECT' | 'BASIC_SCAFFOLD';
-  businessDescription?: string;
-  ddl?: string;
 };
+
+/**
+ * 从 AI 助手「继续生成第一版」跳转而来时的预填值。
+ *
+ * <p>项目已在聊天里登记，这里只负责生成。四个字段必须与已登记项目完全一致，
+ * 提交时才会被识别为「本人未完成的项目」并从中断处续做，因此预填后锁定不可改。</p>
+ */
+function readAgentPrefill(): Partial<WizardValues> | undefined {
+  const params = new URLSearchParams(window.location.search);
+  const projectCode = params.get('projectCode');
+  const projectName = params.get('projectName');
+  if (params.get('from') !== 'agent' || !projectCode || !projectName) return undefined;
+  return {
+    projectCode,
+    projectName,
+    packageName: params.get('packageName') ?? undefined,
+    description: params.get('description') ?? undefined,
+  };
+}
 
 function sameOptionalText(left?: string, right?: string) {
   return (left ?? '').trim() === (right ?? '').trim();
@@ -75,6 +92,7 @@ export default function ProjectOnboardingPage() {
   const { message } = App.useApp();
   const intl = useIntl();
   const [form] = Form.useForm<WizardValues>();
+  const [agentPrefill] = useState(readAgentPrefill);
   const [step, setStep] = useState(0);
   const [users, setUsers] = useState<PlatformUser[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -83,7 +101,6 @@ export default function ProjectOnboardingPage() {
   const currentUser = currentUserSnapshot();
   const permissions = currentUser?.permissions ?? [];
   const canGenerate = permissions.includes('system:project-factory:generate');
-  const mode = Form.useWatch('generationMode', form);
 
   useEffect(() => {
     if (permissions.includes('system:user:list')) {
@@ -113,7 +130,7 @@ export default function ProjectOnboardingPage() {
     const fields: Array<Array<keyof WizardValues>> = [
       ['projectCode', 'projectName', 'packageName', 'description'],
       ['memberIds'],
-      ['generationMode', 'businessDescription', 'ddl'],
+      [],
     ];
     await form.validateFields(fields[step] ?? []);
     setStep((value) => Math.min(value + 1, 3));
@@ -174,9 +191,7 @@ export default function ProjectOnboardingPage() {
         existingTasks[0] ??
         (await createProjectGeneration({
           projectId: targetProject.id,
-          generationMode: values.generationMode,
-          businessDescription: values.businessDescription,
-          ddl: values.ddl,
+          generationMode: 'BASIC_SCAFFOLD',
         }));
       setGeneration(task);
       void message.success(
@@ -226,6 +241,7 @@ export default function ProjectOnboardingPage() {
     <PageContainer
       title={intl.formatMessage({ id: 'onboarding.title' })}
       subTitle={intl.formatMessage({ id: 'onboarding.subtitle' })}
+      style={{ maxWidth: 1100, margin: '0 auto' }}
       // 本页从项目管理进入，且不在导航菜单中，必须自带退出口，否则只能靠浏览器后退。
       extra={[
         <Popconfirm
@@ -255,14 +271,15 @@ export default function ProjectOnboardingPage() {
         />
       )}
       <ProCard bordered>
-        <Steps current={step} items={steps} style={{ marginBottom: 32 }} />
+        <Steps current={step} items={steps} style={{ maxWidth: 860, margin: '0 auto 32px' }} />
         <Form<WizardValues>
           form={form}
           layout="vertical"
+          style={{ maxWidth: 860, margin: '0 auto' }}
           initialValues={{
             packageName: 'com.kaiwu.app',
-            generationMode: 'AI_PROJECT',
             memberIds: [],
+            ...agentPrefill,
           }}
         >
           <div style={{ display: step === 0 ? 'block' : 'none' }}>
@@ -273,30 +290,38 @@ export default function ProjectOnboardingPage() {
               description={intl.formatMessage({ id: 'onboarding.boundary.description' })}
               style={{ marginBottom: 16 }}
             />
-            <Form.Item
-              name="projectCode"
-              label={intl.formatMessage({ id: 'onboarding.projectCode' })}
-              rules={[
-                { required: true },
-                {
-                  pattern: /^[a-z][a-z0-9-]{1,63}$/,
-                  message: intl.formatMessage({ id: 'onboarding.projectCode.rule' }),
-                },
-              ]}
-            >
-              <Input
-                placeholder={intl.formatMessage({ id: 'onboarding.projectCode.placeholder' })}
-              />
-            </Form.Item>
-            <Form.Item
-              name="projectName"
-              label={intl.formatMessage({ id: 'onboarding.projectName' })}
-              rules={[{ required: true, max: 100 }]}
-            >
-              <Input
-                placeholder={intl.formatMessage({ id: 'onboarding.projectName.placeholder' })}
-              />
-            </Form.Item>
+            <Row gutter={16}>
+              <Col xs={24} md={12}>
+                <Form.Item
+                  name="projectCode"
+                  label={intl.formatMessage({ id: 'onboarding.projectCode' })}
+                  rules={[
+                    { required: true },
+                    {
+                      pattern: /^[a-z][a-z0-9-]{1,63}$/,
+                      message: intl.formatMessage({ id: 'onboarding.projectCode.rule' }),
+                    },
+                  ]}
+                >
+                  <Input
+                    disabled={!!agentPrefill}
+                    placeholder={intl.formatMessage({ id: 'onboarding.projectCode.placeholder' })}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={12}>
+                <Form.Item
+                  name="projectName"
+                  label={intl.formatMessage({ id: 'onboarding.projectName' })}
+                  rules={[{ required: true, max: 100 }]}
+                >
+                  <Input
+                    disabled={!!agentPrefill}
+                    placeholder={intl.formatMessage({ id: 'onboarding.projectName.placeholder' })}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
             <Form.Item
               name="packageName"
               label={intl.formatMessage({ id: 'onboarding.packageName' })}
@@ -304,6 +329,7 @@ export default function ProjectOnboardingPage() {
               extra={intl.formatMessage({ id: 'onboarding.packageName.extra' })}
             >
               <Input
+                disabled={!!agentPrefill}
                 placeholder={intl.formatMessage({ id: 'onboarding.packageName.placeholder' })}
               />
             </Form.Item>
@@ -312,6 +338,7 @@ export default function ProjectOnboardingPage() {
               label={intl.formatMessage({ id: 'onboarding.description' })}
             >
               <Input.TextArea
+                disabled={!!agentPrefill}
                 rows={3}
                 maxLength={500}
                 showCount
@@ -350,48 +377,6 @@ export default function ProjectOnboardingPage() {
               description={intl.formatMessage({ id: 'onboarding.ai.description' })}
               style={{ marginBottom: 16 }}
             />
-            <Form.Item
-              name="generationMode"
-              label={intl.formatMessage({ id: 'onboarding.mode.label' })}
-              rules={[{ required: true }]}
-            >
-              <Radio.Group>
-                <Radio.Button value="AI_PROJECT">
-                  {intl.formatMessage({ id: 'onboarding.mode.ai' })}
-                </Radio.Button>
-                <Radio.Button value="BASIC_SCAFFOLD">
-                  {intl.formatMessage({ id: 'onboarding.mode.basic' })}
-                </Radio.Button>
-              </Radio.Group>
-            </Form.Item>
-            {mode === 'AI_PROJECT' && (
-              <Form.Item
-                name="businessDescription"
-                label={intl.formatMessage({ id: 'onboarding.businessDescription' })}
-                rules={[{ required: true, min: 10, max: 5000 }]}
-                extra={intl.formatMessage({ id: 'onboarding.businessDescription.extra' })}
-              >
-                <Input.TextArea
-                  rows={7}
-                  showCount
-                  maxLength={5000}
-                  placeholder={intl.formatMessage({
-                    id: 'onboarding.businessDescription.placeholder',
-                  })}
-                />
-              </Form.Item>
-            )}
-            <Form.Item
-              name="ddl"
-              label={intl.formatMessage({ id: 'onboarding.ddl' })}
-              extra={intl.formatMessage({ id: 'onboarding.ddl.extra' })}
-            >
-              <Input.TextArea
-                rows={6}
-                placeholder={intl.formatMessage({ id: 'onboarding.ddl.placeholder' })}
-                style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}
-              />
-            </Form.Item>
           </div>
           <div style={{ display: step === 3 ? 'block' : 'none' }}>
             <Alert
@@ -403,7 +388,14 @@ export default function ProjectOnboardingPage() {
             />
           </div>
         </Form>
-        <Space style={{ marginTop: 24 }}>
+        <Space
+          style={{
+            maxWidth: 860,
+            margin: '24px auto 0',
+            display: 'flex',
+            justifyContent: 'flex-end',
+          }}
+        >
           {step > 0 && (
             <Button onClick={() => setStep((value) => value - 1)}>
               {intl.formatMessage({ id: 'onboarding.previous' })}

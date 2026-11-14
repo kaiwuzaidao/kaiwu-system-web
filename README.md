@@ -68,3 +68,24 @@ pnpm verify
 ## License
 
 本项目基于 [Apache License 2.0](LICENSE) 开源。
+
+### 工作台受管待办深链接（C2）
+
+子应用通过本项目配置`workspace.deep-links`登记白名单，例如JSON值：
+
+```json
+{"version":1,"routes":[{"prefix":"/workflow/tasks","queryParameters":["taskId","tab"]}]}
+```
+
+来源scope必须等于当前项目ID，不继承全局白名单。待办链接先进入`/workspace/{projectId}?route=...`，route仅编码一次；
+宿主重新读取当前项目配置，采用最长路径段前缀及精确参数名匹配。重复参数、跨项目projectId覆盖、外部URL、双重编码及未登记路由均不进入子路由。
+配置失败时保留项目首页，旧的普通待办链接继续使用原导航规则。示例路由须由业务子应用实际实现，任务资源归属与办理权限仍由目标服务验证。
+本分支仅功能集成，未合并dev、发布或部署；见[本步证据](docs/verification/workflow-platform-step3-c2-20261103/HANDOFF.md)。
+
+### C1最小后端服务登记界面
+
+项目详情中的后端服务面板支持查看、登记、修改地址及启停；既有`system:project:list/update`权限只控制按钮，
+实际请求还须由System确认目标项目管理员。加载403时不显示写操作，保存失败保留表单并展示错误。
+默认地址可清空并与原项目字段同步，非default要求规范原点；多服务开关默认关闭，尚未完成全副本升级时服务端会拒绝相应变更。
+路由弹窗按服务展示独立audience的片段，不自动发布；停用后的已发布片段需另行撤销。本次保留C2深链接行为。
+见[本步交接](docs/verification/workflow-platform-step4-c1-20261103/HANDOFF.md)。

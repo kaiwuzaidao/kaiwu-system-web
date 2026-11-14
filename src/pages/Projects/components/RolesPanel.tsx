@@ -1,13 +1,12 @@
 import { ModalForm, ProFormText, ProTable } from '@ant-design/pro-components';
 import { useIntl } from '@umijs/max';
-import { App, Checkbox, Modal, Popconfirm, Space } from 'antd';
+import { App, Popconfirm, Space } from 'antd';
 import { useEffect, useState } from 'react';
 import AuthButton from '@/components/AuthButton';
 import DictTag from '@/components/DictTag';
 import {
   createProjectRole,
   deleteProjectRole,
-  grantProjectRoleMenus,
   queryProjectMenus,
   queryProjectRoles,
   updateProjectRole,
@@ -15,8 +14,8 @@ import {
   type ProjectMenu,
   type ProjectRole,
 } from '@/services/projects';
-import { referencedText } from '@/utils/referencedI18n';
-import { flattenMenus, type ProjectPermissionProps } from './types';
+import RoleGrantModal, { type GrantTab } from './RoleGrantModal';
+import type { ProjectPermissionProps } from './types';
 
 export default function RolesPanel({ project, permissions }: ProjectPermissionProps) {
   const { message } = App.useApp();
@@ -25,8 +24,7 @@ export default function RolesPanel({ project, permissions }: ProjectPermissionPr
   const [menus, setMenus] = useState<ProjectMenu[]>([]);
   const [editing, setEditing] = useState<ProjectRole>();
   const [formOpen, setFormOpen] = useState(false);
-  const [granting, setGranting] = useState<ProjectRole>();
-  const [selectedMenuIds, setSelectedMenuIds] = useState<string[]>([]);
+  const [granting, setGranting] = useState<{ role: ProjectRole; tab: GrantTab }>();
 
   const load = async () => {
     const [roleRows, menuRows] = await Promise.all([
@@ -38,9 +36,10 @@ export default function RolesPanel({ project, permissions }: ProjectPermissionPr
   };
 
   useEffect(() => {
-    void load();
+    void load().catch((error) => {
+      void message.error(error instanceof Error ? error.message : String(error));
+    });
   }, [project.id]);
-  useEffect(() => setSelectedMenuIds(granting?.menuIds ?? []), [granting]);
 
   return (
     <>
@@ -93,21 +92,34 @@ export default function RolesPanel({ project, permissions }: ProjectPermissionPr
                   permission="system:project:role"
                   permissions={permissions}
                   disabled={record.builtIn}
-                  onClick={() => setGranting(record)}
+                  onClick={() => setGranting({ role: record, tab: 'menus' })}
                 >
                   {intl.formatMessage({ id: 'roles.assignMenus' })}
+                </AuthButton>
+                <AuthButton
+                  type="link"
+                  size="small"
+                  permission="system:project:role"
+                  permissions={permissions}
+                  onClick={() => setGranting({ role: record, tab: 'dataScope' })}
+                >
+                  {intl.formatMessage({ id: 'roles.dataScope' })}
                 </AuthButton>
                 <Popconfirm
                   title={intl.formatMessage({
                     id: record.status === 'ACTIVE' ? 'roles.disableConfirm' : 'roles.enableConfirm',
                   })}
                   onConfirm={async () => {
-                    await updateProjectRoleStatus(
-                      project.id,
-                      record.id,
-                      record.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE',
-                    );
-                    await load();
+                    try {
+                      await updateProjectRoleStatus(
+                        project.id,
+                        record.id,
+                        record.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE',
+                      );
+                      await load();
+                    } catch (error) {
+                      void message.error(error instanceof Error ? error.message : String(error));
+                    }
                   }}
                 >
                   <AuthButton
@@ -125,9 +137,13 @@ export default function RolesPanel({ project, permissions }: ProjectPermissionPr
                 <Popconfirm
                   title={intl.formatMessage({ id: 'roles.deleteConfirm' })}
                   onConfirm={async () => {
-                    await deleteProjectRole(project.id, record.id);
-                    void message.success(intl.formatMessage({ id: 'roles.deleted' }));
-                    await load();
+                    try {
+                      await deleteProjectRole(project.id, record.id);
+                      void message.success(intl.formatMessage({ id: 'roles.deleted' }));
+                      await load();
+                    } catch (error) {
+                      void message.error(error instanceof Error ? error.message : String(error));
+                    }
                   }}
                 >
                   <AuthButton
@@ -207,43 +223,20 @@ export default function RolesPanel({ project, permissions }: ProjectPermissionPr
           label={intl.formatMessage({ id: 'roles.roleDescription' })}
         />
       </ModalForm>
-      <Modal
-        title={intl.formatMessage(
-          { id: 'roles.assignTitle' },
-          {
-            suffix: granting
-              ? intl.formatMessage({ id: 'projects.titleSuffix' }, { name: granting.roleName })
-              : '',
-          },
-        )}
-        open={Boolean(granting)}
-        onCancel={() => setGranting(undefined)}
-        onOk={async () => {
-          if (!granting) return;
-          await grantProjectRoleMenus(project.id, granting.id, selectedMenuIds);
-          void message.success(intl.formatMessage({ id: 'roles.grantUpdated' }));
-          setGranting(undefined);
-          await load();
-        }}
-      >
-        <Checkbox.Group
-          style={{ display: 'grid', gap: 8 }}
-          value={selectedMenuIds}
-          options={flattenMenus(menus).map((menu) => ({
-            label: menu.permissionCode
-              ? intl.formatMessage(
-                  { id: 'roles.menuOption' },
-                  {
-                    name: referencedText(intl, menu.menuNameKey, menu.menuName),
-                    code: menu.permissionCode,
-                  },
-                )
-              : referencedText(intl, menu.menuNameKey, menu.menuName),
-            value: menu.id,
-          }))}
-          onChange={(values) => setSelectedMenuIds(values as string[])}
+      {granting && (
+        <RoleGrantModal
+          key={`${granting.role.id}-${granting.tab}`}
+          project={project}
+          role={granting.role}
+          menus={menus}
+          initialTab={granting.tab}
+          onClose={() => setGranting(undefined)}
+          onSaved={() => {
+            setGranting(undefined);
+            void load();
+          }}
         />
-      </Modal>
+      )}
     </>
   );
 }

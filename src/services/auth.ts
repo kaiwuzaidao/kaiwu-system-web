@@ -15,6 +15,8 @@ export type CurrentUser = {
   locale: SupportedLocale;
   /** 为 true 表示密码由管理员设定或重置，必须先改密码才能使用其它功能。 */
   mustChangePassword?: boolean;
+  /** 用户级偏好：登录后默认进入 AI 助手聊天模式。只影响界面入口，不授予权限。 */
+  agentAutoOpen?: boolean;
 };
 
 export type TokenData = {
@@ -172,6 +174,21 @@ export async function updateCurrentUserLocale(locale: SupportedLocale) {
   return synchronizedUser;
 }
 
+/**
+ * 持久化「登录后默认进入 AI 助手」偏好，并同步内存中的用户快照。
+ *
+ * <p>接口挂在网关已放行的 /api/agent 下（/api/auth 逐条放行），权限沿用 system:agent:ask。</p>
+ */
+export async function updateAgentAutoOpen(autoOpen: boolean) {
+  // PUT 幂等，与语言偏好一样允许令牌过期时刷新后重试。
+  const user = await apiRequest<CurrentUser>('/api/agent/preferences', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ autoOpen }),
+  });
+  return synchronizeCurrentUser(user);
+}
+
 /** 改密成功后清除本地强制改密标记，否则用户会被一直挡在个人中心。 */
 export function clearMustChangePassword() {
   const user = currentUserSnapshot();
@@ -315,9 +332,20 @@ async function doRefresh(redirectOnFailure: boolean): Promise<TokenData | undefi
   return result.data;
 }
 
+/**
+ * 刷新令牌每次轮换，旧令牌立即作废；Cookie 又是各标签页共享的。两个标签页同时刷新时，
+ * 后到的那个会拿着已作废的令牌得到 401，被当成会话失效而登出。用 Web Locks 把整个浏览器
+ * 的刷新串行化：后拿到锁的标签页读到的是前一个标签页刚写入的新 Cookie，自然成功。
+ * 不支持 Web Locks 的环境退回原行为。
+ */
+async function withRefreshLock<T>(task: () => Promise<T>): Promise<T> {
+  const locks = typeof navigator === 'undefined' ? undefined : navigator.locks;
+  return locks ? await locks.request('kaiwu-auth-refresh', task) : task();
+}
+
 async function refreshTokens(redirectOnFailure: boolean): Promise<TokenData | undefined> {
   if (!refreshingPromise) {
-    refreshingPromise = doRefresh(redirectOnFailure).finally(() => {
+    refreshingPromise = withRefreshLock(() => doRefresh(redirectOnFailure)).finally(() => {
       refreshingPromise = null;
     });
   }
@@ -340,6 +368,27 @@ export async function restoreSession(): Promise<boolean> {
     // catalog 故障不撤销已恢复的会话，继续使用最小救援包。
   }
   return true;
+}
+
+/**
+ * 刷新当前会话并重新载入服务端权限快照。
+ *
+ * <p>权限由登录/刷新时写入会话快照。部署期间已打开的页面可能仍持有旧快照，
+ * 需要一个不跳转登录页的主动刷新入口来收敛到最新授权。</p>
+ */
+export async function refreshSession(): Promise<TokenData | undefined> {
+  if (!hasSession()) return undefined;
+  const refreshed = await refreshTokens(false);
+  if (!refreshed) return undefined;
+  try {
+    const activeLocale = await activateAuthenticatedLocale(refreshed.user.locale);
+    const synchronized = { ...refreshed, user: { ...refreshed.user, locale: activeLocale } };
+    synchronizeCurrentUser(synchronized.user);
+    return synchronized;
+  } catch {
+    // 权限刷新成功时不因目录服务短暂不可用而撤销会话。
+    return refreshed;
+  }
 }
 
 export async function apiRequest<T>(

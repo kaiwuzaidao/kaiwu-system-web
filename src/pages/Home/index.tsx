@@ -1,44 +1,38 @@
+import usePlatformUiPreference from '@/hooks/usePlatformUiPreferences';
 import {
   ApiOutlined,
   ArrowRightOutlined,
   BellOutlined,
   CheckCircleFilled,
-  CloudUploadOutlined,
-  CrownFilled,
   DatabaseOutlined,
   ExclamationCircleFilled,
   FileTextOutlined,
-  GitlabOutlined,
   LoadingOutlined,
+  LoginOutlined,
+  PlayCircleOutlined,
   ReloadOutlined,
+  PlusOutlined,
   RocketOutlined,
   SearchOutlined,
 } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
 import { history, useIntl } from '@umijs/max';
-import {
-  Alert,
-  App,
-  Button,
-  Card,
-  Col,
-  Empty,
-  Input,
-  Row,
-  Space,
-  Spin,
-  Tag,
-  Typography,
-} from 'antd';
+import { Alert, App, Button, Card, Col, Empty, Input, Row, Space, Spin, Typography } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import DictTag from '@/components/DictTag';
+import ProjectEntryCard from '@/components/ProjectEntryCard';
 import { queryAiProvider, type AiProviderConfig } from '@/services/ai';
 import { queryCurrentUser, type CurrentUser } from '@/services/auth';
-import { queryGitlabConfig, type GitlabConfig } from '@/services/gitlab';
 import { queryNotificationSummary, type NotificationSummary } from '@/services/notifications';
 import { queryProjectGenerations, type ProjectGeneration } from '@/services/projectFactory';
 import { queryCurrentProjects, type PlatformProject } from '@/services/projects';
-import { openProjectEntry, readProjectOpenMode } from '@/utils/projectEntry';
+import { queryTodoSummary, type TodoSummary } from '@/services/todos';
+import { safeInternalPath } from '@/utils/navigation';
+import { useLocaleFormatters } from '@/utils/format';
+import { openProjectEntry, projectWorkspacePath, readProjectOpenMode } from '@/utils/projectEntry';
+import AuthButton from '@/components/AuthButton';
+import DictTag from '@/components/DictTag';
+import LineIcon from '@/components/LineIcon';
+import { kaiwuPalette } from '@/theme/tokens';
 
 function greetingKey(): string {
   const h = new Date().getHours();
@@ -71,14 +65,16 @@ async function safe<T>(enabled: boolean, fn: () => Promise<T>) {
 }
 
 export default function HomePage() {
+  const pollSeconds = usePlatformUiPreference('platform.home.poll_seconds');
   const { message } = App.useApp();
   const intl = useIntl();
+  const format = useLocaleFormatters();
   const [user, setUser] = useState<CurrentUser>();
   const [projects, setProjects] = useState<PlatformProject[]>([]);
   const [generations, setGenerations] = useState<ProjectGeneration[]>([]);
   const [ai, setAi] = useState<AiProviderConfig>();
-  const [gitlab, setGitlab] = useState<GitlabConfig>();
   const [inbox, setInbox] = useState<NotificationSummary>();
+  const [businessTodos, setBusinessTodos] = useState<TodoSummary>();
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [keyword, setKeyword] = useState('');
@@ -90,19 +86,20 @@ export default function HomePage() {
       const currentUser = await queryCurrentUser();
       setUser(currentUser);
       const can = (code: string) => currentUser.permissions.includes(code);
-      const [projectRows, generationRows, aiConfig, gitlabConfig, summary] = await Promise.all([
+      const [projectRows, generationRows, aiConfig, summary, todoSummary] = await Promise.all([
         queryCurrentProjects(),
         safe(can('system:project-factory:list'), queryProjectGenerations),
         safe(can('system:ai:list'), queryAiProvider),
-        safe(can('system:git:list'), queryGitlabConfig),
         // 收件箱是每个登录用户自己的，不需要权限码。
         safe(true, queryNotificationSummary),
+        // 业务项目投递的待办同样是用户自己的；取不到时只是不显示，不影响工作台其余内容。
+        safe(true, queryTodoSummary),
       ]);
       setProjects(projectRows);
       setGenerations(generationRows ?? []);
       setAi(aiConfig);
-      setGitlab(gitlabConfig);
       setInbox(summary);
+      setBusinessTodos(todoSummary);
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -119,17 +116,12 @@ export default function HomePage() {
   }, [load]);
 
   // 有任务在跑时自动刷新，让工作台的进行中状态是活的。
-  const hasRunning = generations.some(
-    (task) =>
-      ['PENDING', 'RUNNING'].includes(task.status) ||
-      task.backendPushStatus === 'PUSHING' ||
-      task.frontendPushStatus === 'PUSHING',
-  );
+  const hasRunning = generations.some((task) => ['PENDING', 'RUNNING'].includes(task.status));
   useEffect(() => {
     if (!hasRunning) return undefined;
-    const timer = window.setInterval(() => void load(), 5000);
+    const timer = window.setInterval(() => void load(), pollSeconds * 1000);
     return () => window.clearInterval(timer);
-  }, [hasRunning, load]);
+  }, [hasRunning, load, pollSeconds]);
 
   const permissions = user?.permissions ?? [];
   const can = (code: string) => permissions.includes(code);
@@ -139,6 +131,33 @@ export default function HomePage() {
 
   const todos = useMemo<TodoItem[]>(() => {
     const items: TodoItem[] = [];
+
+    // 业务项目投递的待办排在最前面：它们是真正需要某个人处理的事；已逾期的置顶（排序稳定，其余保持服务端顺序）。
+    const projectNames = new Map(
+      projects.map((project) => [project.projectCode, project.projectName]),
+    );
+    [...(businessTodos?.recent ?? [])]
+      .sort((a, b) => Number(b.overdue) - Number(a.overdue))
+      .forEach((todo) => {
+        const due = todo.overdue
+          ? intl.formatMessage({ id: 'home.todo.overdue' })
+          : todo.dueAt
+            ? intl.formatMessage({ id: 'home.todo.dueAt' }, { time: format.dateTime(todo.dueAt) })
+            : undefined;
+        items.push({
+          key: `todo-${todo.id}`,
+          tone: todo.overdue ? 'error' : 'processing',
+          icon: <LineIcon name="clipboard" />,
+          title: todo.title,
+          desc: [due, projectNames.get(todo.projectCode) ?? todo.projectCode, todo.content]
+            .filter(Boolean)
+            .join(' · '),
+          actionText: intl.formatMessage({ id: 'home.todo.handle' }),
+          // 链接由业务服务提供，经安全校验后才跳转；缺失或不合法时进入该项目的后台入口。
+          onAction: () =>
+            history.push(safeInternalPath(todo.linkUrl) ?? projectWorkspacePath(todo.projectId)),
+        });
+      });
 
     if (inbox && inbox.unreadCount > 0) {
       items.push({
@@ -185,26 +204,7 @@ export default function HomePage() {
         });
       });
 
-    const pendingPush = generations.filter(
-      (task) =>
-        task.status === 'SUCCESS' &&
-        !(task.backendPushStatus === 'PUSHED' && task.frontendPushStatus === 'PUSHED'),
-    );
-    if (pendingPush.length > 0 && can('system:project-factory:push')) {
-      items.push({
-        key: 'gen-pending-push',
-        tone: 'warning',
-        icon: <CloudUploadOutlined />,
-        title: intl.formatMessage({ id: 'home.todo.pendingPush' }, { count: pendingPush.length }),
-        desc: pendingPush
-          .map((task) => task.projectName)
-          .join(intl.formatMessage({ id: 'home.listSeparator' })),
-        actionText: intl.formatMessage({ id: 'home.todo.push' }),
-        onAction: () => history.push('/project-factory'),
-      });
-    }
-
-    if (ai && (!ai.enabled || !ai.apiKeyConfigured || ai.lastTestStatus === 'FAILED')) {
+    if (ai && (!ai.apiKeyConfigured || ai.lastTestStatus === 'FAILED')) {
       items.push({
         key: 'ai-not-ready',
         tone: 'warning',
@@ -212,36 +212,22 @@ export default function HomePage() {
         title: intl.formatMessage({ id: 'home.todo.aiNotReady' }),
         desc: !ai.apiKeyConfigured
           ? intl.formatMessage({ id: 'home.todo.aiNoKey' })
-          : !ai.enabled
-            ? intl.formatMessage({ id: 'home.todo.configuredDisabled' })
-            : ai.lastTestMessage || intl.formatMessage({ id: 'home.todo.lastTestFailed' }),
+          : ai.lastTestMessage || intl.formatMessage({ id: 'home.todo.lastTestFailed' }),
         actionText: intl.formatMessage({ id: 'home.todo.configure' }),
         onAction: () => history.push('/ai-provider'),
       });
     }
 
-    if (
-      gitlab &&
-      (!gitlab.enabled || !gitlab.tokenConfigured || gitlab.lastTestStatus === 'FAILED')
-    ) {
-      items.push({
-        key: 'gitlab-not-ready',
-        tone: 'warning',
-        icon: <GitlabOutlined />,
-        title: intl.formatMessage({ id: 'home.todo.gitlabNotReady' }),
-        desc: !gitlab.tokenConfigured
-          ? intl.formatMessage({ id: 'home.todo.gitlabNoToken' })
-          : !gitlab.enabled
-            ? intl.formatMessage({ id: 'home.todo.configuredDisabled' })
-            : gitlab.lastTestMessage || intl.formatMessage({ id: 'home.todo.lastTestFailed' }),
-        actionText: intl.formatMessage({ id: 'home.todo.configure' }),
-        onAction: () => history.push('/gitlab-config'),
-      });
-    }
-
     return items;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [generations, ai, gitlab, permissions, inbox, intl]);
+  }, [generations, ai, permissions, inbox, businessTodos, projects, intl]);
+
+  // 概览只带最近若干条，真实总数可能更大：数字用总数，列表末尾提示还有多少未显示。
+  const extraTodos = Math.max(
+    0,
+    (businessTodos?.openCount ?? 0) - (businessTodos?.recent.length ?? 0),
+  );
+  const todoCount = todos.length + extraTodos;
 
   const filtered = useMemo(() => {
     const kw = keyword.trim().toLowerCase();
@@ -267,27 +253,14 @@ export default function HomePage() {
   };
 
   return (
-    <PageContainer header={{ title: null, breadcrumb: {} }} style={{ background: 'transparent' }}>
-      <div
-        style={{
-          borderRadius: 12,
-          padding: '28px 32px',
-          marginBottom: 16,
-          background: 'linear-gradient(120deg, #4f46e5 0%, #6d5bef 40%, #7c3aed 100%)',
-          color: '#fff',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: 16,
-          boxShadow: '0 12px 28px rgba(79,70,229,0.22)',
-        }}
-      >
+    <PageContainer
+      className="kaiwu-home"
+      title={intl.formatMessage({ id: 'menu.system.home' })}
+      style={{ background: 'transparent' }}
+    >
+      <div className="kaiwu-home-heading">
         <div>
-          <div style={{ fontSize: 13, opacity: 0.78, letterSpacing: 1 }}>
-            {intl.formatMessage({ id: 'home.controlPlane' })}
-          </div>
-          <div style={{ fontSize: 24, fontWeight: 600, marginTop: 4 }}>
+          <h1>
             {intl.formatMessage(
               { id: 'home.greeting.user' },
               {
@@ -295,16 +268,35 @@ export default function HomePage() {
                 name: user?.displayName ?? intl.formatMessage({ id: 'home.defaultUser' }),
               },
             )}
-          </div>
-          <div style={{ marginTop: 6, opacity: 0.86, fontSize: 13 }}>
-            {todos.length > 0
-              ? intl.formatMessage({ id: 'home.summary.pending' }, { count: todos.length })
+          </h1>
+          <p>
+            {todoCount > 0
+              ? intl.formatMessage({ id: 'home.summary.pending' }, { count: todoCount })
               : intl.formatMessage({ id: 'home.summary.clear' })}
-          </div>
+          </p>
         </div>
-        <Button ghost icon={<ReloadOutlined />} loading={loading} onClick={() => void load()}>
-          {intl.formatMessage({ id: 'home.refresh' })}
-        </Button>
+        <Space>
+          <Button onClick={() => history.push('/projects')}>
+            {intl.formatMessage({ id: 'projects.title' })}
+            <ArrowRightOutlined />
+          </Button>
+          <AuthButton
+            permission="system:project:create"
+            permissions={permissions}
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => history.push('/project-onboarding')}
+          >
+            {intl.formatMessage({ id: 'projects.open' })}
+          </AuthButton>
+          <Button
+            type="text"
+            aria-label={intl.formatMessage({ id: 'home.refresh' })}
+            icon={<ReloadOutlined />}
+            loading={loading}
+            onClick={() => void load()}
+          />
+        </Space>
       </div>
 
       {error && (
@@ -318,61 +310,110 @@ export default function HomePage() {
       )}
 
       {!loading && businessProjects.length === 0 && canStartFirstProject && (
-        <FirstProjectGuide
-          aiReady={Boolean(ai?.enabled && ai.apiKeyConfigured)}
-          gitlabReady={Boolean(gitlab?.enabled && gitlab.tokenConfigured)}
-        />
+        <FirstProjectGuide aiReady={Boolean(ai?.apiKeyConfigured)} />
       )}
 
-      <Card
-        title={intl.formatMessage({ id: 'home.todo.title' })}
-        variant="borderless"
-        style={{ marginBottom: 16 }}
-        styles={{ header: { borderBottom: 'none', paddingBottom: 0 } }}
-      >
-        {todos.length === 0 ? (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              padding: '8px 0',
-              color: 'rgba(0,0,0,0.45)',
-              fontSize: 13,
-            }}
-          >
-            <CheckCircleFilled style={{ color: '#52c41a', fontSize: 16 }} />
-            {intl.formatMessage({ id: 'home.todo.empty' })}
-          </div>
-        ) : (
-          <Row gutter={[12, 12]}>
-            {todos.map((todo) => (
-              <Col xs={24} lg={12} key={todo.key}>
-                <TodoCard todo={todo} />
-              </Col>
-            ))}
-          </Row>
-        )}
-      </Card>
+      {/* 概览只使用现有数据；连通测试结果不代表实时服务状态。 */}
+      <div className="kaiwu-home-overview">
+        <div className="kaiwu-home-stats">
+          <Card className="kaiwu-stat-card">
+            <span className="kaiwu-stat-label">
+              {intl.formatMessage({ id: 'home.projects.title' })}
+            </span>
+            <LineIcon name="grid" className="kaiwu-stat-icon" />
+            <strong>{loading || error ? '—' : String(projects.length).padStart(2, '0')}</strong>
+            <span>{intl.formatMessage({ id: 'projects.title' })}</span>
+          </Card>
+          <Card className="kaiwu-stat-card">
+            <span className="kaiwu-stat-label">
+              {intl.formatMessage({ id: 'home.stat.ai.title' })}
+            </span>
+            <LineIcon name="activity" className="kaiwu-stat-icon" />
+            <strong className="kaiwu-stat-state">
+              {ai
+                ? intl.formatMessage({
+                    id: ai.apiKeyConfigured ? 'ai.configured' : 'ai.notConfigured',
+                  })
+                : '—'}
+            </strong>
+            <span>
+              {ai?.model ?? '—'}
+              {ai?.lastTestStatus && (
+                <>
+                  {' '}
+                  · {intl.formatMessage({ id: 'dictType.ai.test.status' })}{' '}
+                  <DictTag dictCode="ai.test.status" value={ai.lastTestStatus} />
+                </>
+              )}
+            </span>
+          </Card>
+        </div>
+        <Card
+          className="kaiwu-home-todos"
+          title={
+            <SectionTitle
+              title={intl.formatMessage({ id: 'home.todo.heading' })}
+              desc={intl.formatMessage({ id: 'home.todo.desc' })}
+            />
+          }
+          extra={
+            todoCount > 0 ? (
+              <span className="kaiwu-dot-tag ant-tag ant-tag-warning">
+                {intl.formatMessage({ id: 'home.todo.countTag' }, { count: todoCount })}
+              </span>
+            ) : undefined
+          }
+        >
+          {todos.length === 0 ? (
+            <div className="kaiwu-todo-empty">
+              <CheckCircleFilled />
+              {intl.formatMessage({ id: 'home.todo.empty' })}
+            </div>
+          ) : (
+            <>
+              {/* 业务待办可能很多：列表在卡片内滚动，不把左侧状态卡撑高。 */}
+              <div className="kaiwu-home-todo-list">
+                <Row gutter={[0, 12]}>
+                  {todos.map((todo) => (
+                    <Col xs={24} key={todo.key}>
+                      <TodoCard todo={todo} />
+                    </Col>
+                  ))}
+                </Row>
+              </div>
+              {extraTodos > 0 && (
+                <Typography.Text type="secondary" className="kaiwu-home-todo-more">
+                  {intl.formatMessage({ id: 'home.todo.more' }, { count: extraTodos })}
+                </Typography.Text>
+              )}
+            </>
+          )}
+        </Card>
+      </div>
 
       <Card
         title={
-          projects.length > 0
-            ? intl.formatMessage({ id: 'home.projects.titleCount' }, { count: projects.length })
-            : intl.formatMessage({ id: 'home.projects.title' })
+          <SectionTitle
+            title={intl.formatMessage({ id: 'home.projects.heading' })}
+            count={projects.length > 0 ? projects.length : undefined}
+            desc={intl.formatMessage({ id: 'home.projects.desc' })}
+          />
         }
-        variant="borderless"
-        styles={{ header: { borderBottom: 'none', paddingBottom: 0 } }}
         extra={
           projects.length > 6 ? (
             <Input
               allowClear
-              prefix={<SearchOutlined style={{ color: 'rgba(0,0,0,0.35)' }} />}
+              prefix={<SearchOutlined style={{ color: kaiwuPalette.textPlaceholder }} />}
               placeholder={intl.formatMessage({ id: 'home.projects.search' })}
               value={keyword}
               onChange={(event) => setKeyword(event.target.value)}
               style={{ width: 220 }}
             />
+          ) : can('system:project:list') ? (
+            <Button type="link" onClick={() => history.push('/projects')}>
+              {intl.formatMessage({ id: 'home.projects.manageAll' })}
+              <LineIcon name="arrow" size={12} />
+            </Button>
           ) : undefined
         }
       >
@@ -389,7 +430,7 @@ export default function HomePage() {
           ) : (
             <Row gutter={[12, 12]}>
               {filtered.map((project) => (
-                <Col xs={24} sm={12} lg={8} key={project.id}>
+                <Col xs={24} md={12} key={project.id}>
                   <ProjectEntryCard project={project} onEnter={() => enter(project)} />
                 </Col>
               ))}
@@ -405,7 +446,7 @@ export default function HomePage() {
  * 首次使用只给出完成第一个可维护项目所需的最短路径。
  * 这里刻意不引入在线表单搭建或二次生成入口：Kaiwu 只负责交付第一版源码。
  */
-function FirstProjectGuide({ aiReady, gitlabReady }: { aiReady: boolean; gitlabReady: boolean }) {
+function FirstProjectGuide({ aiReady }: { aiReady: boolean }) {
   const intl = useIntl();
   const steps = [
     {
@@ -422,6 +463,18 @@ function FirstProjectGuide({ aiReady, gitlabReady }: { aiReady: boolean; gitlabR
       icon: <DatabaseOutlined />,
       title: intl.formatMessage({ id: 'home.guide.deliver.title' }),
       desc: intl.formatMessage({ id: 'home.guide.deliver.desc' }),
+    },
+    {
+      // 拿到两个仓库后最常卡住的一步：给出可以直接复制的一条命令（./kaiwu project-up）。
+      icon: <PlayCircleOutlined />,
+      title: intl.formatMessage({ id: 'home.guide.run.title' }),
+      desc: intl.formatMessage({ id: 'home.guide.run.desc' }),
+      command: intl.formatMessage({ id: 'home.guide.run.command' }),
+    },
+    {
+      icon: <LoginOutlined />,
+      title: intl.formatMessage({ id: 'home.guide.enter.title' }),
+      desc: intl.formatMessage({ id: 'home.guide.enter.desc' }),
     },
   ];
 
@@ -450,7 +503,7 @@ function FirstProjectGuide({ aiReady, gitlabReady }: { aiReady: boolean; gitlabR
       />
       <Row gutter={[12, 12]}>
         {steps.map((step, index) => (
-          <Col xs={24} md={8} key={step.title}>
+          <Col xs={24} md={12} xl={{ flex: '20%' }} key={step.title}>
             <div
               style={{
                 display: 'flex',
@@ -469,8 +522,8 @@ function FirstProjectGuide({ aiReady, gitlabReady }: { aiReady: boolean; gitlabR
                   width: 28,
                   height: 28,
                   borderRadius: '50%',
-                  color: '#4f46e5',
-                  background: 'rgba(79,70,229,0.10)',
+                  color: '#3B82F6',
+                  background: kaiwuPalette.primarySoft,
                   flexShrink: 0,
                 }}
               >
@@ -478,7 +531,7 @@ function FirstProjectGuide({ aiReady, gitlabReady }: { aiReady: boolean; gitlabR
               </div>
               <div>
                 <Space size={6}>
-                  <span style={{ color: '#4f46e5' }}>{step.icon}</span>
+                  <span style={{ color: '#3B82F6' }}>{step.icon}</span>
                   <Typography.Text strong>{step.title}</Typography.Text>
                 </Space>
                 <Typography.Text
@@ -487,6 +540,29 @@ function FirstProjectGuide({ aiReady, gitlabReady }: { aiReady: boolean; gitlabR
                 >
                   {step.desc}
                 </Typography.Text>
+                {step.command && (
+                  // 规范代码块：块级 + 浅灰底 + 等宽；行内 code 换行时会把边框断成两截。
+                  <div
+                    style={{
+                      position: 'relative',
+                      marginTop: 8,
+                      padding: '8px 32px 8px 10px',
+                      fontSize: 12,
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                      lineHeight: 1.6,
+                      wordBreak: 'break-all',
+                      background: '#fafafa',
+                      border: '1px solid #f0f0f0',
+                      borderRadius: 8,
+                    }}
+                  >
+                    {step.command}
+                    <Typography.Text
+                      copyable={{ text: step.command }}
+                      style={{ position: 'absolute', top: 6, right: 8 }}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </Col>
@@ -496,159 +572,47 @@ function FirstProjectGuide({ aiReady, gitlabReady }: { aiReady: boolean; gitlabR
         {aiReady
           ? intl.formatMessage({ id: 'home.guide.aiReady' })
           : intl.formatMessage({ id: 'home.guide.aiOptional' })}
-        {gitlabReady
-          ? intl.formatMessage({ id: 'home.guide.gitlabReady' })
-          : intl.formatMessage({ id: 'home.guide.gitlabOptional' })}
       </Typography.Text>
     </Card>
   );
 }
 
 function TodoCard({ todo }: { todo: TodoItem }) {
+  // 失败与告警保留语义色，其余按设计稿用浅蓝。
   const toneMap = {
-    error: { bg: 'rgba(255,77,79,0.10)', fg: '#cf1322', border: 'rgba(255,77,79,0.28)' },
-    warning: { bg: 'rgba(250,173,20,0.12)', fg: '#d48806', border: 'rgba(250,173,20,0.32)' },
-    processing: { bg: 'rgba(79,70,229,0.10)', fg: '#4f46e5', border: 'rgba(79,70,229,0.28)' },
+    error: { bg: '#fff0f1', fg: '#d44856' },
+    warning: { bg: '#fff7ea', fg: '#b78032' },
+    processing: { bg: '#e8f2ff', fg: '#2563eb' },
   } as const;
   const t = toneMap[todo.tone];
   return (
-    <div
-      style={{
-        border: `1px solid ${t.border}`,
-        borderRadius: 10,
-        padding: '12px 14px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        background: '#fff',
-        height: '100%',
-      }}
-    >
-      <div
-        style={{
-          width: 32,
-          height: 32,
-          borderRadius: 8,
-          background: t.bg,
-          color: t.fg,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: 15,
-          flexShrink: 0,
-        }}
-      >
+    <div className="kaiwu-todo-card">
+      <div className="kaiwu-todo-card-icon" style={{ background: t.bg, color: t.fg }}>
         {todo.icon}
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 500 }}>{todo.title}</div>
-        <Typography.Text
-          type="secondary"
-          style={{ fontSize: 12, display: 'block' }}
-          ellipsis={{ tooltip: todo.desc }}
-        >
+      <div className="kaiwu-todo-card-copy">
+        <strong>{todo.title}</strong>
+        <Typography.Text type="secondary" ellipsis={{ tooltip: todo.desc }}>
           {todo.desc}
         </Typography.Text>
       </div>
       <Button type="link" size="small" onClick={todo.onAction}>
         {todo.actionText}
+        <LineIcon name="arrow" size={12} />
       </Button>
     </div>
   );
 }
 
-function ProjectEntryCard({ project, onEnter }: { project: PlatformProject; onEnter: () => void }) {
-  const intl = useIntl();
-  const isSystem = project.projectCode === 'system';
+/** 卡片标题区：标题、可选计数与一行说明，对应设计稿 section-title / section-sub。 */
+function SectionTitle({ title, desc, count }: { title: string; desc: string; count?: number }) {
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onEnter}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter') onEnter();
-      }}
-      style={{
-        border: '1px solid #f0f0f0',
-        borderRadius: 10,
-        padding: '14px 16px',
-        cursor: 'pointer',
-        transition: 'all 0.15s ease',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        background: '#fff',
-        height: '100%',
-      }}
-      onMouseEnter={(event) => {
-        event.currentTarget.style.borderColor = '#4f46e5';
-        event.currentTarget.style.boxShadow = '0 6px 16px rgba(79,70,229,0.12)';
-      }}
-      onMouseLeave={(event) => {
-        event.currentTarget.style.borderColor = '#f0f0f0';
-        event.currentTarget.style.boxShadow = 'none';
-      }}
-    >
-      <div
-        style={{
-          width: 36,
-          height: 36,
-          borderRadius: 8,
-          background: isSystem
-            ? 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)'
-            : 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
-          color: '#fff',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: 15,
-          fontWeight: 600,
-          flexShrink: 0,
-        }}
-      >
-        {isSystem ? <CrownFilled /> : project.projectName[0]}
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div
-          style={{
-            fontWeight: 500,
-            fontSize: 14,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-          }}
-        >
-          <span
-            style={{
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {project.projectName}
-          </span>
-          <DictTag dictCode="project.status" value={project.status} />
-        </div>
-        <div
-          style={{
-            fontSize: 12,
-            color: 'rgba(0,0,0,0.45)',
-            marginTop: 2,
-            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {project.projectCode}
-          {!isSystem && !project.backendUrl && (
-            <Tag style={{ marginLeft: 6 }} color="default">
-              {intl.formatMessage({ id: 'home.projects.noEntry' })}
-            </Tag>
-          )}
-        </div>
-      </div>
-      <ArrowRightOutlined style={{ color: 'rgba(0,0,0,0.35)' }} />
+    <div className="kaiwu-section-title">
+      <span>
+        {title}
+        {count !== undefined && <span className="kaiwu-section-count"> / {count}</span>}
+      </span>
+      <small>{desc}</small>
     </div>
   );
 }

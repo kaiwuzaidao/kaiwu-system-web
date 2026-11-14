@@ -1,0 +1,44 @@
+{
+  ".ant-pro-global-header": {
+    "fontSize": "14px",
+    "height": "56px",
+    "width": "1408px",
+    "padding": "0px",
+    "borderRadius": "0px"
+  },
+  ".ant-pro-sider": {
+    "fontSize": "14px",
+    "height": "944px",
+    "width": "256px",
+    "padding": "0px",
+    "borderRadius": "0px"
+  },
+  ".kaiwu-content-frame": {
+    "fontSize": "14px",
+    "height": "729.688px",
+    "width": "1184px",
+    "padding": "32px 40px",
+    "borderRadius": "0px"
+  },
+  ".ant-page-header-heading-title": {
+    "fontSize": "20px",
+    "height": "32px",
+    "width": "60px",
+    "padding": "0px",
+    "borderRadius": "0px"
+  },
+  ".ant-card-head": {
+    "fontSize": "16px",
+    "height": "56px",
+    "width": "358px",
+    "padding": "0px 24px",
+    "borderRadius": "8px 8px 0px 0px"
+  },
+  ".ant-card": {
+    "fontSize": "14px",
+    "height": "197px",
+    "width": "348px",
+    "padding": "0px",
+    "borderRadius": "8px"
+  }
+}

@@ -11,10 +11,18 @@ import { LoginForm, ProFormText } from '@ant-design/pro-components';
 import { App, Typography } from 'antd';
 import { useEffect } from 'react';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
-import { hasSession, login, readAndClearSessionExitReason } from '@/services/auth';
+import {
+  currentUserSnapshot,
+  hasSession,
+  login,
+  readAndClearSessionExitReason,
+} from '@/services/auth';
 import { queryPublicI18nCatalog } from '@/services/i18n';
+import { queryCurrentProjects } from '@/services/projects';
+import { enterableProjects, enterProject, findEnterableByCode } from '@/utils/projectEntry';
 import { installCatalog } from '@/i18n/runtime';
 import { currentLocale } from '@/utils/locale';
+import { kaiwuPalette } from '@/theme/tokens';
 
 type LoginValues = {
   username: string;
@@ -24,7 +32,7 @@ type LoginValues = {
 /**
  * 读取并校验登录后的回跳地址。
  *
- * 子应用（如 /apps/reimburse/...）不是本 SPA 的路由，由 nginx 反代到独立的前端，
+ * 子应用（如 /apps/order-center/...）不是本 SPA 的路由，由 nginx 反代到独立的前端，
  * 因此必须整页跳转而不是 history.replace——后者只会在 SPA 内部匹配不到路由。
  * 整页刷新是安全的：Access Token 只驻留内存，会由 HttpOnly Refresh Cookie 恢复。
  *
@@ -48,14 +56,64 @@ function safeRedirectTarget(): string | undefined {
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
-/** 有合法回跳地址就整页跳过去，否则回首页。 */
-function leaveLogin(): void {
+/**
+ * 其他项目链到登录页时带的目标项目编码（?project=<编码>）。
+ *
+ * 只接受形如项目编码的短字符串；它只用来在「当前用户有权访问的项目」里做相等匹配，
+ * 绝不参与跳转地址拼接，所以不是开放重定向的入口。
+ */
+function requestedProjectCode(): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  const raw = new URLSearchParams(window.location.search).get('project');
+  return raw && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(raw) ? raw : undefined;
+}
+
+/**
+ * 登录后去哪：
+ * 1. 带 ?project=<编码> 且该项目当前用户能进入 → 直接进入该项目；不能进入 → 项目选择页并提示；
+ * 2. 带合法的 redirect → 整页跳过去；
+ * 3. 只有一个可进入的项目 → 直接进入；
+ * 4. 否则进项目选择页。
+ *
+ * 自动进入一律在当前页：登录提交后的跳转不是用户手势触发，新标签页会被浏览器拦截，
+ * 用户会卡在登录页，所以这里不读「打开方式」偏好。
+ *
+ * 需要强制改密的用户不走直达：/workspace 是不带平台布局的整屏页，改密弹窗不会出现，
+ * 直达会让新用户带着初始密码进到业务后台。他们先落在会自己挂载改密弹窗的选择页。
+ */
+async function leaveLogin(): Promise<void> {
+  const mustChange = Boolean(currentUserSnapshot()?.mustChangePassword);
+  const projectCode = requestedProjectCode();
+  if (projectCode && !mustChange) {
+    try {
+      const target = findEnterableByCode(await queryCurrentProjects(), projectCode);
+      if (target) {
+        enterProject(target, 'inline');
+        return;
+      }
+    } catch {
+      // 查不到项目清单时退回选择页，不把已验证的登录判为失败。
+    }
+    history.replace(`/select-project?denied=${encodeURIComponent(projectCode)}`);
+    return;
+  }
   const target = safeRedirectTarget();
-  if (target) {
+  if (target && !(mustChange && target.startsWith('/workspace/'))) {
     window.location.replace(target);
     return;
   }
-  history.replace('/');
+  if (!mustChange) {
+    try {
+      const entries = enterableProjects(await queryCurrentProjects());
+      if (entries.length === 1) {
+        enterProject(entries[0], 'inline');
+        return;
+      }
+    } catch {
+      // 查不到项目清单时退回选择页，选择页自己会提示加载失败并允许重试。
+    }
+  }
+  history.replace('/select-project');
 }
 
 export default function LoginPage() {
@@ -98,7 +156,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (hasSession()) {
-      leaveLogin();
+      void leaveLogin();
       return;
     }
     // 匿名 catalog 只含登录与救援文案；失败时静默保留随 Web 发布的最小救援包。
@@ -117,9 +175,9 @@ export default function LoginPage() {
   const submit = async (values: LoginValues) => {
     try {
       await login(values.username, values.password);
-      // 需要强制改密时不做特殊跳转：进入首页后会弹出不可关闭的改密弹窗。
+      // 需要强制改密时落在项目选择页，由它挂载不可关闭的改密弹窗（见 leaveLogin）。
       // Access Token 仍只驻留内存；整页刷新由 HttpOnly Refresh Cookie 安全恢复。
-      leaveLogin();
+      void leaveLogin();
       return true;
     } catch (reason) {
       void message.error(
@@ -130,53 +188,15 @@ export default function LoginPage() {
   };
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        background: '#f5f6fa',
-        position: 'relative',
-        overflow: 'hidden',
-      }}
-    >
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          top: -160,
-          right: -160,
-          width: 480,
-          height: 480,
-          borderRadius: '50%',
-          background:
-            'radial-gradient(circle at center, rgba(124,58,237,0.18) 0%, rgba(124,58,237,0) 70%)',
-          pointerEvents: 'none',
-        }}
-      />
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          bottom: -180,
-          left: -120,
-          width: 460,
-          height: 460,
-          borderRadius: '50%',
-          background:
-            'radial-gradient(circle at center, rgba(79,70,229,0.16) 0%, rgba(79,70,229,0) 70%)',
-          pointerEvents: 'none',
-        }}
-      />
-
+    <div className="kaiwu-login">
       <div
         style={{
-          flex: '1 1 520px',
-          padding: '64px 72px',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between',
           color: '#fff',
-          background: 'linear-gradient(135deg, #4f46e5 0%, #6d5bef 45%, #7c3aed 100%)',
+          // V5：保留深色工程感，但改深海军蓝——去掉原来的紫与青绿。
+          background: `linear-gradient(140deg, ${kaiwuPalette.loginDeep} 0%, ${kaiwuPalette.loginDeepAlt} 100%)`,
           minWidth: 0,
           position: 'relative',
         }}
@@ -199,11 +219,11 @@ export default function LoginPage() {
                 border: '1px solid rgba(255,255,255,0.3)',
               }}
             >
-              {/* i18n-ignore-next-line -- 产品字标，不是自然语言文案。 */}Z
+              {/* i18n-ignore-next-line -- 产品字标，不是自然语言文案。 */}K
             </div>
             <div>
               {/* i18n-ignore-next-line -- 产品名称保持统一。 */}
-              <div style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.2 }}>Kaiwu</div>
+              <div style={{ fontSize: 28, fontWeight: 600, lineHeight: 1.2 }}>Kaiwu</div>
               <div style={{ fontSize: 12, opacity: 0.8, marginTop: 2 }}>
                 {intl.formatMessage({ id: 'login.brand.subtitle' })}
               </div>
@@ -211,7 +231,7 @@ export default function LoginPage() {
           </div>
 
           <div style={{ marginTop: 64 }}>
-            <div style={{ fontSize: 34, fontWeight: 600, lineHeight: 1.25 }}>
+            <div style={{ fontSize: 40, fontWeight: 600, lineHeight: 1.25 }}>
               {intl.formatMessage({ id: 'login.hero.title.first' })}
               <br />
               {intl.formatMessage({ id: 'login.hero.title.second' })}
@@ -314,10 +334,10 @@ export default function LoginPage() {
       </div>
 
       <div
+        className="kaiwu-login-form"
         style={{
-          flex: '0 0 480px',
           maxWidth: '100%',
-          padding: '80px 56px',
+
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
@@ -328,12 +348,12 @@ export default function LoginPage() {
         <div style={{ position: 'absolute', top: 24, right: 28 }}>
           <LanguageSwitcher />
         </div>
-        <div style={{ maxWidth: 340, width: '100%', margin: '0 auto' }}>
+        <div style={{ maxWidth: 400, width: '100%', margin: '0 auto' }}>
           <div style={{ marginBottom: 32 }}>
-            <div style={{ fontSize: 22, fontWeight: 600 }}>
+            <div style={{ fontSize: 28, fontWeight: 600 }}>
               {intl.formatMessage({ id: 'login.form.title' })}
             </div>
-            <div style={{ fontSize: 13, color: 'rgba(0,0,0,0.45)', marginTop: 6 }}>
+            <div style={{ fontSize: 13, color: kaiwuPalette.textTertiary, marginTop: 6 }}>
               {intl.formatMessage({ id: 'login.form.subtitle' })}
             </div>
           </div>
@@ -341,17 +361,20 @@ export default function LoginPage() {
             logo={null as never}
             title={null as never}
             subTitle={null as never}
-            initialValues={{ username: 'admin' }}
             onFinish={submit}
             submitter={{
               searchConfig: { submitText: intl.formatMessage({ id: 'login.form.submit' }) },
               submitButtonProps: { size: 'large', block: true },
             }}
-            contentStyle={{ minWidth: 0, maxWidth: '100%', padding: 0 }}
+            contentStyle={{ width: '100%', minWidth: 0, maxWidth: '100%', padding: 0 }}
           >
             <ProFormText
               name="username"
-              fieldProps={{ size: 'large', prefix: <UserOutlined /> }}
+              fieldProps={{
+                size: 'large',
+                prefix: <UserOutlined />,
+                'aria-label': intl.formatMessage({ id: 'login.username.placeholder' }),
+              }}
               placeholder={intl.formatMessage({ id: 'login.username.placeholder' })}
               rules={[
                 {
@@ -363,7 +386,11 @@ export default function LoginPage() {
             <ProFormText.Password
               colProps={{ span: 12 }}
               name="password"
-              fieldProps={{ size: 'large', prefix: <LockOutlined /> }}
+              fieldProps={{
+                size: 'large',
+                prefix: <LockOutlined />,
+                'aria-label': intl.formatMessage({ id: 'login.password.placeholder' }),
+              }}
               placeholder={intl.formatMessage({ id: 'login.password.placeholder' })}
               rules={[
                 {
@@ -381,12 +408,6 @@ export default function LoginPage() {
           </Typography.Paragraph>
         </div>
       </div>
-
-      <style>{`
-        @media (max-width: 900px) {
-          .kaiwu-login-hero { display: none; }
-        }
-      `}</style>
     </div>
   );
 }

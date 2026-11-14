@@ -112,9 +112,13 @@ export default function ConfigsPage() {
           <Popconfirm
             title={intl.formatMessage({ id: 'configs.deleteConfirm' })}
             onConfirm={async () => {
-              await deleteConfig(scopeId, row.id);
-              void message.success(intl.formatMessage({ id: 'configs.deleted' }));
-              actionRef.current?.reload();
+              try {
+                await deleteConfig(scopeId, row.id);
+                void message.success(intl.formatMessage({ id: 'configs.deleted' }));
+                actionRef.current?.reload();
+              } catch (error) {
+                void message.error(error instanceof Error ? error.message : String(error));
+              }
             }}
           >
             <AuthButton

@@ -1,4 +1,5 @@
 import { defineConfig } from '@umijs/max';
+import { kaiwuTheme } from '../src/theme/antd';
 
 /**
  * 第一次开发生成项目时，可显式把一个同源路径代理到本机业务前端。
@@ -44,36 +45,16 @@ export default defineConfig({
   initialState: {},
   antd: {
     appConfig: {},
+    // 主题集中在 src/theme/antd.ts，组件内联样式取同一份 token，避免颜色散落多处。
     configProvider: {
-      theme: {
-        token: {
-          colorPrimary: '#4f46e5',
-          colorLink: '#4f46e5',
-          borderRadius: 6,
-          fontSize: 14,
-        },
-        components: {
-          Layout: {
-            headerBg: '#ffffff',
-            siderBg: '#ffffff',
-            bodyBg: '#f5f6fa',
-          },
-          Menu: {
-            itemSelectedBg: 'rgba(79,70,229,0.08)',
-            itemSelectedColor: '#4f46e5',
-            itemHoverBg: 'rgba(79,70,229,0.04)',
-          },
-          Card: {
-            borderRadiusLG: 10,
-          },
-        },
-      },
+      theme: kaiwuTheme,
     },
   },
+  // Ant Design Pro 混合布局：原生顶栏与 256px 侧栏。
   layout: {
     title: 'Kaiwu',
     locale: false,
-    siderWidth: 216,
+    siderWidth: 256,
   },
   routes: [
     {
@@ -87,6 +68,12 @@ export default defineConfig({
       icon: 'DashboardOutlined',
       component: './Home',
       hideInMenu: true,
+    },
+    {
+      // 登录后的项目选择页：只列出当前用户有权访问的项目，整屏页不套平台布局。
+      path: '/select-project',
+      component: './ProjectSelect',
+      layout: false,
     },
     {
       // 业务项目后台的宿主页：整屏 iframe，不套平台布局（子应用有自己的侧栏）。
@@ -104,6 +91,12 @@ export default defineConfig({
     {
       path: '/profile',
       component: './Profile',
+      hideInMenu: true,
+    },
+    {
+      // CLI 设备授权确认页（ADR 0035），由命令行打印的链接直接打开，不进菜单。
+      path: '/device',
+      component: './Device',
       hideInMenu: true,
     },
     {
@@ -169,17 +162,17 @@ export default defineConfig({
       hideInMenu: true,
     },
     {
+      path: '/storage',
+      name: '对象存储',
+      icon: 'CloudServerOutlined',
+      component: './Storage',
+      hideInMenu: true,
+    },
+    {
       path: '/ai-provider',
       name: '大模型配置',
       icon: 'ApiOutlined',
       component: './AiProvider',
-      hideInMenu: true,
-    },
-    {
-      path: '/gitlab-config',
-      name: 'GitLab 配置',
-      icon: 'GitlabOutlined',
-      component: './GitlabConfig',
       hideInMenu: true,
     },
     {

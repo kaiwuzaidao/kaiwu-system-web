@@ -10,11 +10,23 @@ import {
   type ActionType,
   type ProColumns,
 } from '@ant-design/pro-components';
-import { Alert, App, Button, Empty, Popconfirm, Select, Space, Tabs, Typography } from 'antd';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Alert,
+  App,
+  Button,
+  Collapse,
+  Empty,
+  Popconfirm,
+  Space,
+  Tabs,
+  Tooltip,
+  Typography,
+} from 'antd';
+import { useEffect, useRef, useState } from 'react';
 import { useIntl } from '@umijs/max';
 import AuthButton from '@/components/AuthButton';
 import DictTag from '@/components/DictTag';
+import MetadataScopePicker from '@/components/MetadataScopePicker';
 import { currentUserSnapshot } from '@/services/auth';
 import { queryCurrentProjects, type PlatformProject } from '@/services/projects';
 import {
@@ -65,18 +77,6 @@ export default function SchedulerPage() {
     jobActionRef.current?.reload();
     executionActionRef.current?.reload();
   }, [projectId]);
-
-  const projectOptions = useMemo(
-    () =>
-      projects.map((project) => ({
-        value: project.id,
-        label: intl.formatMessage(
-          { id: 'scheduler.projectOption' },
-          { name: project.projectName, code: project.projectCode },
-        ),
-      })),
-    [intl, projects],
-  );
 
   const jobColumns: ProColumns<SchedulerJob>[] = [
     {
@@ -141,9 +141,13 @@ export default function SchedulerPage() {
           <Popconfirm
             title={intl.formatMessage({ id: 'scheduler.deleteConfirm' })}
             onConfirm={async () => {
-              await deleteSchedulerJob(job.id);
-              void message.success(intl.formatMessage({ id: 'scheduler.deleted' }));
-              jobActionRef.current?.reload();
+              try {
+                await deleteSchedulerJob(job.id);
+                void message.success(intl.formatMessage({ id: 'scheduler.deleted' }));
+                jobActionRef.current?.reload();
+              } catch (error) {
+                void message.error(error instanceof Error ? error.message : String(error));
+              }
             }}
           >
             <AuthButton
@@ -203,18 +207,13 @@ export default function SchedulerPage() {
   ];
 
   const projectPicker = (
-    <Space>
-      <Typography.Text strong>{intl.formatMessage({ id: 'scheduler.project' })}</Typography.Text>
-      <Select
-        value={projectId}
-        options={projectOptions}
-        showSearch
-        optionFilterProp="label"
-        placeholder={intl.formatMessage({ id: 'scheduler.selectProject' })}
-        style={{ minWidth: 300 }}
-        onChange={setProjectId}
-      />
-    </Space>
+    <MetadataScopePicker
+      value={projectId}
+      projects={projects}
+      includeGlobal={false}
+      placeholder={intl.formatMessage({ id: 'scheduler.selectProject' })}
+      onChange={setProjectId}
+    />
   );
 
   const showCredential = async () => {
@@ -263,12 +262,16 @@ export default function SchedulerPage() {
         </AuthButton>,
       ]}
     >
-      <Alert
-        showIcon
-        type="info"
+      <Collapse
+        size="small"
         style={{ marginBottom: 16 }}
-        message={intl.formatMessage({ id: 'scheduler.securityTitle' })}
-        description={intl.formatMessage({ id: 'scheduler.securityDescription' })}
+        items={[
+          {
+            key: 'security',
+            label: intl.formatMessage({ id: 'scheduler.securityTitle' }),
+            children: intl.formatMessage({ id: 'scheduler.securityDescription' }),
+          },
+        ]}
       />
       <Tabs
         items={[
@@ -309,27 +312,45 @@ export default function SchedulerPage() {
                       icon={<ReloadOutlined />}
                       onClick={() => {
                         if (projectId) {
-                          void querySchedulerHandlers(projectId).then(setHandlers);
+                          void querySchedulerHandlers(projectId)
+                            .then(setHandlers)
+                            .catch((error) => {
+                              void message.error(
+                                error instanceof Error ? error.message : String(error),
+                              );
+                            });
                         }
                         jobActionRef.current?.reload();
                       }}
                     >
                       {intl.formatMessage({ id: 'scheduler.refresh' })}
                     </Button>,
-                    <AuthButton
+                    <Tooltip
                       key="create"
-                      type="primary"
-                      icon={<PlusOutlined />}
-                      permission="system:scheduler:save"
-                      permissions={permissions}
-                      disabled={!projectId || handlers.length === 0}
-                      onClick={() => {
-                        setEditing(undefined);
-                        setFormOpen(true);
-                      }}
+                      title={
+                        !projectId
+                          ? intl.formatMessage({ id: 'scheduler.selectProject' })
+                          : handlers.length === 0
+                            ? intl.formatMessage({ id: 'scheduler.noHandlersHint' })
+                            : undefined
+                      }
                     >
-                      {intl.formatMessage({ id: 'scheduler.create' })}
-                    </AuthButton>,
+                      <span>
+                        <AuthButton
+                          type="primary"
+                          icon={<PlusOutlined />}
+                          permission="system:scheduler:save"
+                          permissions={permissions}
+                          disabled={!projectId || handlers.length === 0}
+                          onClick={() => {
+                            setEditing(undefined);
+                            setFormOpen(true);
+                          }}
+                        >
+                          {intl.formatMessage({ id: 'scheduler.create' })}
+                        </AuthButton>
+                      </span>
+                    </Tooltip>,
                   ]}
                   locale={{
                     emptyText: (

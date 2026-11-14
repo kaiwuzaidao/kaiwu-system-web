@@ -1,0 +1,40 @@
+.kaiwu-org-dialog {
+  .ant-modal-content {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 32px);
+    max-height: calc(100dvh - 32px);
+  }
+  .ant-modal-body {
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .ant-table-wrapper {
+    margin-top: 12px;
+  }
+  &-pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-top: 12px;
+  }
+}
+
+.kaiwu-org-member-table {
+  .ant-table-thead > tr > th.ant-table-selection-column,
+  .ant-table-tbody > tr > td.ant-table-selection-column {
+    padding-inline: 12px;
+    text-align: left;
+  }
+
+  .ant-table-thead .ant-table-selection-column .ant-typography {
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .ant-checkbox:not(.ant-checkbox-disabled):not(.ant-checkbox-checked) .ant-checkbox-inner {
+    border-color: #64748b;
+  }
+}

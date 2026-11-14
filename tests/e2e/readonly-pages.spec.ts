@@ -15,7 +15,7 @@ const pages = [
   ['字典管理', '/dictionaries', '字典管理'],
   ['定时任务', '/scheduler', '项目定时任务'],
   ['大模型配置', '/ai-provider', '大模型配置'],
-  ['GitLab 配置', '/gitlab-config', 'GitLab 配置'],
+  ['对象存储', '/storage', '存储账号'],
   ['项目工厂', '/project-factory', '项目工厂'],
 ] as const;
 

@@ -1,3 +1,4 @@
+import { kaiwuPalette } from '@/theme/tokens';
 import { DeleteOutlined, EditOutlined, HolderOutlined, PlusOutlined } from '@ant-design/icons';
 import {
   ModalForm,
@@ -30,6 +31,7 @@ import { useIntl } from '@umijs/max';
 import AuthButton from '@/components/AuthButton';
 import DictSelect from '@/components/DictSelect';
 import DictTag from '@/components/DictTag';
+import LocaleCodeHelp from '@/components/LocaleCodeHelp';
 import MetadataScopePicker from '@/components/MetadataScopePicker';
 import useRowDragSort from '@/hooks/useRowDragSort';
 import LocalizedNameField, {
@@ -37,7 +39,7 @@ import LocalizedNameField, {
   ResourceCreatorModal,
   ResourcePickerModal,
 } from '@/components/LocalizedNameField';
-import { type I18nResource, queryI18nResources } from '@/services/i18n';
+import { type I18nResource, queryI18nResourceOptions } from '@/services/i18n';
 import { queryCurrentUser } from '@/services/auth';
 import { referencedText } from '@/utils/referencedI18n';
 import {
@@ -158,7 +160,7 @@ function DictLabelField() {
 
   const loadResources = async (silent = false) => {
     try {
-      const rows = await queryI18nResources();
+      const rows = await queryI18nResourceOptions();
       setResources(rows);
       setResourcesLoaded(true);
       return rows;
@@ -244,7 +246,7 @@ function DictLabelField() {
           <div
             style={{
               padding: 12,
-              border: '1px solid #f0f0f0',
+              border: `1px solid ${kaiwuPalette.border}`,
               borderRadius: 6,
               background: '#fafafa',
             }}
@@ -510,7 +512,7 @@ export default function DictionariesPage() {
       <Tooltip title={intl.formatMessage({ id: 'dicts.dragSort' })}>
         <HolderOutlined
           {...sort.handleProps(row.id)}
-          style={{ color: '#8c8c8c', cursor: 'grab' }}
+          style={{ color: kaiwuPalette.textTertiary, cursor: 'grab' }}
         />
       </Tooltip>
     ),
@@ -563,9 +565,13 @@ export default function DictionariesPage() {
           <Popconfirm
             title={intl.formatMessage({ id: 'dicts.deleteTypeConfirm' })}
             onConfirm={async () => {
-              await deleteDictType(scopeId, row.id);
-              void message.success(intl.formatMessage({ id: 'dicts.deleted' }));
-              await loadTypes();
+              try {
+                await deleteDictType(scopeId, row.id);
+                void message.success(intl.formatMessage({ id: 'dicts.deleted' }));
+                await loadTypes();
+              } catch (error) {
+                void message.error(error instanceof Error ? error.message : String(error));
+              }
             }}
           >
             <AuthButton
@@ -646,9 +652,13 @@ export default function DictionariesPage() {
           <Popconfirm
             title={intl.formatMessage({ id: 'dicts.deleteItemConfirm' })}
             onConfirm={async () => {
-              await deleteDictItem(scopeId, selected!.id, row.id);
-              void message.success(intl.formatMessage({ id: 'dicts.itemDeleted' }));
-              await loadItems();
+              try {
+                await deleteDictItem(scopeId, selected!.id, row.id);
+                void message.success(intl.formatMessage({ id: 'dicts.itemDeleted' }));
+                await loadItems();
+              } catch (error) {
+                void message.error(error instanceof Error ? error.message : String(error));
+              }
             }}
           >
             <AuthButton
@@ -680,7 +690,7 @@ export default function DictionariesPage() {
           zIndex: 11,
           marginBottom: 16,
           paddingBlock: 8,
-          background: '#f5f6fa',
+          background: kaiwuPalette.page,
           display: 'flex',
           justifyContent: 'space-between',
           gap: 16,
@@ -755,7 +765,7 @@ export default function DictionariesPage() {
                 zIndex: 10,
                 minHeight: 48,
                 paddingBlock: 8,
-                background: '#f5f6fa',
+                background: kaiwuPalette.page,
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'flex-start',
@@ -812,6 +822,9 @@ export default function DictionariesPage() {
           try {
             const saved = await saveDictType(scopeId, {
               ...values,
+              // 全局作用域不渲染「继承全局」开关，ProForm 不会提交未注册字段，
+              // 而后端 inheritGlobal 是 @NotNull；全局字典由后端强制为 false，这里补齐即可。
+              inheritGlobal: values.inheritGlobal ?? false,
               id: typeEditing?.id,
             });
             void message.success(intl.formatMessage({ id: 'dicts.saved' }));
@@ -933,6 +946,11 @@ export default function DictionariesPage() {
             selected?.dictCode === 'platform.locale'
               ? intl.formatMessage({ id: 'dicts.localeCodeTip' })
               : undefined
+          }
+          extra={
+            selected?.dictCode === 'platform.locale' ? (
+              <LocaleCodeHelp fieldName="itemValue" />
+            ) : undefined
           }
           rules={[
             { required: true },

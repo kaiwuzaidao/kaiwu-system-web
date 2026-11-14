@@ -20,6 +20,9 @@ const fallbackFile = join(webRoot, 'src/dictionaries/fallback.ts');
 const pagesDir = join(webRoot, 'src/pages');
 // 语言目录本身决定可扩展 locale，给它维护代码 fallback 会重新引入固定语言集合。
 const databaseOnlyCodes = new Set(['platform.locale']);
+// 后端仓 .publishignore 列出的迁移不随开源发布导出：那是某个部署自己的业务展示数据，
+// 不是平台字典，前端不为它维护 fallback。
+const unpublishedMigrations = readUnpublishedMigrations();
 
 let failed = false;
 
@@ -88,6 +91,25 @@ function readFrontendCodes() {
  * DELETE 必须和 INSERT 一起重放：功能下线时字典会被后续迁移删掉，只看 INSERT
  * 会把已下线的字典当成「后端有、前端缺」而永远报错。
  */
+function readUnpublishedMigrations() {
+  const ignoreFile = resolve(sqlDir, '../../.publishignore');
+  if (!existsSync(ignoreFile)) return [];
+  return readFileSync(ignoreFile, 'utf8')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#'))
+    .map(
+      (pattern) =>
+        new RegExp(
+          `^${pattern
+            .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+            .replace(/\*\*/g, '\u0000')
+            .replace(/\*/g, '[^/]*')
+            .replace(/\u0000/g, '.*')}$`,
+        ),
+    );
+}
+
 function readBackendCodes() {
   const codes = new Set();
   const files = readdirSync(sqlDir)
@@ -99,9 +121,15 @@ function readBackendCodes() {
     });
   for (const file of files) {
     const sql = readFileSync(join(sqlDir, file), 'utf8');
-    for (const [block] of sql.matchAll(/INSERT\s+(?:IGNORE\s+)?INTO\s+sys_dict_type[\s\S]*?;/gi)) {
+    const unpublished = unpublishedMigrations.some((pattern) =>
+      pattern.test(`sql/increment/${file}`),
+    );
+    for (const [block] of sql.matchAll(
+      /INSERT\s+(?:IGNORE\s+)?INTO\s+`?sys_dict_type`?[\s\S]*?;/gi,
+    )) {
       for (const row of block.matchAll(/\(\s*\d+\s*,\s*\d+\s*,\s*'([a-z][a-z0-9._]*)'/g)) {
-        codes.add(row[1]);
+        if (unpublished) databaseOnlyCodes.add(row[1]);
+        else codes.add(row[1]);
       }
     }
     for (const [block] of sql.matchAll(/DELETE\s+FROM\s+sys_dict_type[\s\S]*?;/gi)) {

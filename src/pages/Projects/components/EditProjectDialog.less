@@ -1,0 +1,27 @@
+.kaiwu-project-edit-dialog {
+  .ant-modal-content {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 32px);
+    max-height: calc(100dvh - 32px);
+  }
+  .ant-modal-body {
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .kaiwu-project-edit-heading.ant-typography {
+    margin: 16px 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e5ebf3;
+  }
+  .kaiwu-project-edit-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 20px;
+  }
+}
+@media (max-width: 600px) {
+  .kaiwu-project-edit-dialog .kaiwu-project-edit-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

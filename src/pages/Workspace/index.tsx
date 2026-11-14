@@ -1,8 +1,15 @@
-import { history, useIntl, useParams } from '@umijs/max';
+import { kaiwuPalette } from '@/theme/tokens';
+import { history, useIntl, useLocation, useParams } from '@umijs/max';
 import { Button, Result, Spin } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { hasSession } from '@/services/auth';
-import { queryCurrentProjects, type PlatformProject } from '@/services/projects';
+import {
+  queryCurrentProjects,
+  queryEffectiveProjectConfigs,
+  type PlatformProject,
+  type EffectiveProjectConfig,
+} from '@/services/projects';
+import { applyWorkspaceDeepLink, workspaceDeepLink } from '@/utils/workspaceDeepLink';
 
 type Resolved =
   | { kind: 'loading' }
@@ -25,7 +32,9 @@ export default function Workspace() {
   const intl = useIntl();
   const params = useParams<{ projectId?: string }>();
   const projectId = params.projectId ?? '';
+  const { search } = useLocation();
   const [projects, setProjects] = useState<PlatformProject[]>();
+  const [configs, setConfigs] = useState<EffectiveProjectConfig[]>([]);
 
   // layout:false 的路由不经 ProLayout 的 onPageChange，登录态要自己把关，
   // 否则未登录直接访问本路由会渲染成"入口不可用"，而不是回到登录页。
@@ -36,9 +45,16 @@ export default function Workspace() {
   useEffect(() => {
     let active = true;
     if (!hasSession()) return () => {};
-    void queryCurrentProjects()
-      .then((data) => {
-        if (active) setProjects(data ?? []);
+    setProjects(undefined);
+    void Promise.all([
+      queryCurrentProjects(),
+      search ? queryEffectiveProjectConfigs(projectId).catch(() => []) : Promise.resolve([]),
+    ])
+      .then(([data, configuration]) => {
+        if (active) {
+          setProjects(data ?? []);
+          setConfigs(configuration ?? []);
+        }
       })
       .catch(() => {
         if (active) setProjects([]);
@@ -46,23 +62,33 @@ export default function Workspace() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [projectId, search]);
 
   const resolved = useMemo<Resolved>(() => {
     if (!projects) return { kind: 'loading' };
     const project = projects.find((item) => item.id === projectId);
     if (!project?.backendUrl) return { kind: 'missing' };
-    const target = new URL(project.backendUrl, window.location.href);
-    // 子应用靠 query 上的 projectId 认项目上下文，必须带上。
-    if (!target.searchParams.has('projectId')) {
-      target.searchParams.set('projectId', project.id);
+    let target: URL;
+    try {
+      target = new URL(project.backendUrl, window.location.href);
+      if (!['http:', 'https:'].includes(target.protocol) || target.username || target.password)
+        return { kind: 'missing' };
+      target = applyWorkspaceDeepLink(
+        target,
+        workspaceDeepLink(search, projectId, configs),
+        window.location.origin,
+      );
+    } catch {
+      return { kind: 'missing' };
     }
+    // 子应用靠 query 上的 projectId 认项目上下文，必须带上。
+    target.searchParams.set('projectId', project.id);
     // 跨源入口用不了 postMessage 桥接，套 iframe 只是徒增一层；直接放行过去。
     if (target.origin !== window.location.origin) {
       return { kind: 'external', href: target.href };
     }
     return { kind: 'frame', src: target.href, title: project.projectName };
-  }, [projects, projectId]);
+  }, [projects, projectId, search, configs]);
 
   useEffect(() => {
     if (resolved.kind === 'external') window.location.replace(resolved.href);
@@ -115,5 +141,5 @@ const centered: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  background: '#f5f6fa',
+  background: kaiwuPalette.page,
 };

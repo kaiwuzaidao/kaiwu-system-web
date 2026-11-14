@@ -30,6 +30,7 @@ import { useIntl } from '@umijs/max';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import AuthButton from '@/components/AuthButton';
 import DictTag from '@/components/DictTag';
+import MetadataScopePicker from '@/components/MetadataScopePicker';
 import { queryCurrentUser } from '@/services/auth';
 import {
   deleteI18nResource,
@@ -51,7 +52,9 @@ export default function I18nResourcesPage() {
   const { message } = App.useApp();
   const actionRef = useRef<ActionType>();
   const [form] = Form.useForm<ResourceForm>();
-  const [permissions, setPermissions] = useState<string[]>([]);
+  const [userPermissions, setUserPermissions] = useState<string[]>([]);
+  // 空串为平台资源；否则是业务项目 ID（ADR 0037：按项目隔离，各管各的）。
+  const [projectId, setProjectId] = useState('');
   const [locales, setLocales] = useState<I18nLocale[]>([]);
   // 译文导入导出的目标语言；默认语言用原文，不参与翻译。
   const [translationLocale, setTranslationLocale] = useState('');
@@ -61,13 +64,20 @@ export default function I18nResourcesPage() {
   // 导入译文后覆盖率会变化，语言开放状态需要重新拉取，因此提取成可复用函数。
   const loadLocales = useCallback(async () => {
     const user = await queryCurrentUser();
-    setPermissions(user.permissions);
+    setUserPermissions(user.permissions);
     setLocales(await queryI18nLocales(user.locale));
   }, []);
 
   useEffect(() => {
     void loadLocales();
   }, [loadLocales]);
+
+  // 项目资源由服务端按「有效项目管理员」判定，不看平台 system:i18n:*；
+  // 这里只负责让按钮可见，越权请求会被服务端拒绝。
+  const permissions = projectId
+    ? [...userPermissions, 'system:i18n:list', 'system:i18n:save', 'system:i18n:delete']
+    : userPermissions;
+  const inProject = Boolean(projectId);
 
   const edit = (row?: I18nResource) => {
     setEditing(row);
@@ -83,7 +93,7 @@ export default function I18nResourcesPage() {
         : {
             moduleCode: 'common',
             publicVisible: false,
-            requiredResource: true,
+            requiredResource: !inProject,
             status: 'ENABLED',
             translations: {},
           },
@@ -95,8 +105,13 @@ export default function I18nResourcesPage() {
     {
       title: intl.formatMessage({ id: 'i18n.key', defaultMessage: '资源 key' }),
       dataIndex: 'messageKey',
+      width: 260,
       copyable: true,
-      render: (_, row) => <Typography.Text code>{row.messageKey}</Typography.Text>,
+      render: (_, row) => (
+        <Typography.Text code ellipsis={{ tooltip: row.messageKey }}>
+          {row.messageKey}
+        </Typography.Text>
+      ),
     },
     {
       title: intl.formatMessage({ id: 'i18n.defaultText', defaultMessage: '默认文案（zh-CN）' }),
@@ -152,11 +167,15 @@ export default function I18nResourcesPage() {
               defaultMessage: '确定删除该资源？',
             })}
             onConfirm={async () => {
-              await deleteI18nResource(row.id, row.version);
-              void message.success(
-                intl.formatMessage({ id: 'common.deleted', defaultMessage: '已删除' }),
-              );
-              actionRef.current?.reload();
+              try {
+                await deleteI18nResource(row.id, row.version, projectId || undefined);
+                void message.success(
+                  intl.formatMessage({ id: 'common.deleted', defaultMessage: '已删除' }),
+                );
+                actionRef.current?.reload();
+              } catch (error) {
+                void message.error(error instanceof Error ? error.message : String(error));
+              }
             }}
           >
             <AuthButton
@@ -183,54 +202,82 @@ export default function I18nResourcesPage() {
         defaultMessage: '统一维护页面与 API 文案；语言是否可选由覆盖校验决定',
       })}
     >
-      <Alert
-        showIcon
-        style={{ marginBottom: 16 }}
-        message={intl.formatMessage({
-          id: 'i18n.localeCoverage',
-          defaultMessage: '语言开放状态',
-        })}
-        description={
-          <Space wrap>
-            {locales.map((item) => (
-              <Tag key={item.locale} color={item.selectable ? 'green' : 'orange'}>
-                {item.label}（{item.locale}） ·{' '}
-                {item.selectable
-                  ? intl.formatMessage({ id: 'i18n.available', defaultMessage: '可选择' })
-                  : [
-                      ...(!item.selectableConfigured
-                        ? [
-                            intl.formatMessage({
-                              id: 'i18n.notConfigured',
-                              defaultMessage: '目录未开放',
-                            }),
-                          ]
-                        : []),
-                      intl.formatMessage(
-                        { id: 'i18n.missingResources', defaultMessage: '资源 {count}' },
-                        { count: item.missingRequiredResources },
-                      ),
-                      intl.formatMessage(
-                        { id: 'i18n.missingMenus', defaultMessage: '菜单 {count}' },
-                        { count: item.missingMenus },
-                      ),
-                      intl.formatMessage(
-                        { id: 'i18n.missingDictionaries', defaultMessage: '字典 {count}' },
-                        { count: item.missingDictionaryItems },
-                      ),
-                    ].join(' / ')}
-              </Tag>
-            ))}
-          </Space>
-        }
-      />
+      <div style={{ marginBottom: 16 }}>
+        <MetadataScopePicker
+          value={projectId || '0'}
+          fallbackToCurrentProjects
+          isProjectDisabled={(project) => project.builtIn || project.status !== 'ACTIVE'}
+          onChange={(value) => {
+            setProjectId(value === '0' ? '' : value);
+            setTimeout(() => actionRef.current?.reload(), 0);
+          }}
+        />
+      </div>
+      {inProject && (
+        <Alert
+          showIcon
+          type="info"
+          style={{ marginBottom: 16 }}
+          message={intl.formatMessage({
+            id: 'i18n.scopeProjectHint',
+            defaultMessage: '项目文案由项目管理员维护，不参与平台语言开放校验',
+          })}
+        />
+      )}
+      {!inProject && (
+        <Alert
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={intl.formatMessage({
+            id: 'i18n.localeCoverage',
+            defaultMessage: '语言开放状态',
+          })}
+          description={
+            <Space wrap>
+              {locales.map((item) => (
+                <Tag key={item.locale} color={item.selectable ? 'green' : 'orange'}>
+                  {item.label}（{item.locale}） ·{' '}
+                  {item.selectable
+                    ? intl.formatMessage({ id: 'i18n.available', defaultMessage: '可选择' })
+                    : [
+                        ...(!item.selectableConfigured
+                          ? [
+                              intl.formatMessage({
+                                id: 'i18n.notConfigured',
+                                defaultMessage: '目录未开放',
+                              }),
+                            ]
+                          : []),
+                        intl.formatMessage(
+                          { id: 'i18n.missingResources', defaultMessage: '资源 {count}' },
+                          { count: item.missingRequiredResources },
+                        ),
+                        intl.formatMessage(
+                          { id: 'i18n.missingMenus', defaultMessage: '菜单 {count}' },
+                          { count: item.missingMenus },
+                        ),
+                        intl.formatMessage(
+                          { id: 'i18n.missingDictionaries', defaultMessage: '字典 {count}' },
+                          { count: item.missingDictionaryItems },
+                        ),
+                      ].join(' / ')}
+                </Tag>
+              ))}
+            </Space>
+          }
+        />
+      )}
       <ProTable<I18nResource>
         sticky
+        scroll={{ x: 900 }}
         rowKey="id"
         actionRef={actionRef}
         columns={columns}
         search={false}
-        request={async () => ({ data: await queryI18nResources(), success: true })}
+        request={async () => ({
+          data: await queryI18nResources(projectId || undefined),
+          success: true,
+        })}
         toolBarRender={() => [
           /* 开放新语言要求译文全覆盖，平台侧近千条无法逐条手填，
              因此提供整表导出、离线翻译、再导回的通路。 */
@@ -255,7 +302,7 @@ export default function I18nResourcesPage() {
             disabled={!translationLocale}
             onClick={async () => {
               try {
-                await exportI18nTranslations(translationLocale);
+                await exportI18nTranslations(translationLocale, projectId || undefined);
               } catch (error) {
                 void message.error(error instanceof Error ? error.message : String(error));
               }
@@ -278,7 +325,11 @@ export default function I18nResourcesPage() {
               onError?: (error: Error) => void;
             }) => {
               try {
-                const result = await importI18nTranslations(translationLocale, file as File);
+                const result = await importI18nTranslations(
+                  translationLocale,
+                  file as File,
+                  projectId || undefined,
+                );
                 void message.success(
                   intl.formatMessage(
                     { id: 'i18n.importDone', defaultMessage: '已导入 {applied} 条译文' },
@@ -329,19 +380,31 @@ export default function I18nResourcesPage() {
         destroyOnHidden
         onCancel={() => setOpen(false)}
         onOk={() =>
-          void form.validateFields().then(async (values) => {
-            await saveI18nResource({
-              ...values,
-              id: editing?.id,
-              version: editing?.version,
-              translationsJson: JSON.stringify(values.translations ?? {}),
-            });
-            void message.success(
-              intl.formatMessage({ id: 'common.saved', defaultMessage: '已保存' }),
-            );
-            setOpen(false);
-            actionRef.current?.reload();
-          })
+          void form
+            .validateFields()
+            .then(async (values) => {
+              try {
+                await saveI18nResource(
+                  {
+                    ...values,
+                    id: editing?.id,
+                    version: editing?.version,
+                    translationsJson: JSON.stringify(values.translations ?? {}),
+                  },
+                  projectId || undefined,
+                );
+                void message.success(
+                  intl.formatMessage({ id: 'common.saved', defaultMessage: '已保存' }),
+                );
+                setOpen(false);
+                actionRef.current?.reload();
+              } catch (error) {
+                void message.error(error instanceof Error ? error.message : String(error));
+              }
+            })
+            .catch(() => {
+              /* 字段校验错误由表单展示。 */
+            })
         }
       >
         <Form form={form} layout="vertical" preserve={false}>
@@ -391,20 +454,24 @@ export default function I18nResourcesPage() {
                 options={[{ value: 'ENABLED' }, { value: 'DISABLED' }]}
               />
             </Form.Item>
-            <Form.Item
-              name="requiredResource"
-              valuePropName="checked"
-              label={intl.formatMessage({ id: 'i18n.required', defaultMessage: '覆盖必需' })}
-            >
-              <Switch />
-            </Form.Item>
-            <Form.Item
-              name="publicVisible"
-              valuePropName="checked"
-              label={intl.formatMessage({ id: 'i18n.public', defaultMessage: '登录前公开' })}
-            >
-              <Checkbox />
-            </Form.Item>
+            {!inProject && (
+              <Form.Item
+                name="requiredResource"
+                valuePropName="checked"
+                label={intl.formatMessage({ id: 'i18n.required', defaultMessage: '覆盖必需' })}
+              >
+                <Switch />
+              </Form.Item>
+            )}
+            {!inProject && (
+              <Form.Item
+                name="publicVisible"
+                valuePropName="checked"
+                label={intl.formatMessage({ id: 'i18n.public', defaultMessage: '登录前公开' })}
+              >
+                <Checkbox />
+              </Form.Item>
+            )}
           </Space>
           <Form.Item
             name="description"
