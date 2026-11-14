@@ -55,3 +55,11 @@ export function assignUserDepartments(userId: string, departmentIds: string[]) {
     body: JSON.stringify({ departmentIds }),
   });
 }
+
+export function addDepartmentMembers(departmentId: string, userIds: string[]) {
+  return apiRequest<number>(`/api/org/departments/${departmentId}/members`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userIds }),
+  });
+}

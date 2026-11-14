@@ -1,0 +1,212 @@
+@import '../../../theme/typography.less';
+// 分配业务菜单：权限矩阵。颜色与 src/theme/tokens.ts 的 V5 冷蓝一致，不另起色板。
+@primary: #3b82f6;
+@primary-active: #1d4ed8;
+@primary-soft: #eff6ff;
+@primary-border: #dbeafe;
+@border: #e5ebf3;
+@split: #edf2f7;
+@fill-alter: #f8fafd;
+
+.kaiwu-grant {
+  &-toolbar {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding-bottom: 14px;
+  }
+
+  &-search {
+    width: 280px;
+  }
+
+  &-summary {
+    margin-left: auto;
+    color: @kw-text-tertiary;
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+
+    strong {
+      color: @kw-text-strong;
+      font-weight: 600;
+    }
+  }
+
+  &-list {
+    display: grid;
+    gap: 12px;
+    max-height: 60vh;
+    margin-right: -8px;
+    padding-right: 8px;
+    overflow-y: auto;
+  }
+
+  // ---------- 分区：目录 ----------
+  &-section {
+    overflow: hidden;
+    background: #fff;
+    border: 1px solid @border;
+    border-radius: 12px;
+  }
+
+  &-section-head {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding: 12px 16px;
+    background: @fill-alter;
+    border-bottom: 1px solid @split;
+  }
+
+  &-section-icon {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    color: @primary;
+    background: @primary-soft;
+    border: 1px solid @primary-border;
+    border-radius: 9px;
+  }
+
+  &-section-title {
+    flex: 1;
+    min-width: 0;
+    color: @kw-text-strong;
+    font-weight: 600;
+    font-size: 14px;
+  }
+
+  &-progress {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    color: @kw-text-tertiary;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  &-progress-track {
+    width: 64px;
+    height: 4px;
+    overflow: hidden;
+    background: @split;
+    border-radius: 2px;
+
+    span {
+      display: block;
+      height: 100%;
+      background: @primary;
+      border-radius: 2px;
+      transition: width 0.2s;
+    }
+  }
+
+  // 嵌套目录：分区内的小标题。
+  &-subhead {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 10px 16px 6px;
+    color: @kw-text-secondary;
+    font-weight: 600;
+    font-size: 12.5px;
+  }
+
+  // ---------- 行：菜单 + 操作 ----------
+  &-row {
+    display: grid;
+    grid-template-columns: minmax(150px, 200px) 1fr auto;
+    gap: 16px;
+    align-items: center;
+    padding: 12px 16px;
+
+    & + & {
+      border-top: 1px solid @split;
+    }
+
+    &:hover {
+      background: #fbfdff;
+    }
+  }
+
+  &-menu {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    min-width: 0;
+    color: @kw-text;
+    font-weight: 500;
+
+    .ant-typography {
+      color: inherit;
+    }
+  }
+
+  &-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  &-none {
+    color: @kw-text-placeholder;
+    font-size: 12px;
+  }
+
+  &-count {
+    min-width: 36px;
+    color: @kw-text-tertiary;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+
+    &.is-full {
+      color: @primary-active;
+      font-weight: 600;
+    }
+  }
+
+  // ---------- 操作开关：替代复选框，选中为浅蓝底 + 主色字 ----------
+  &-chip {
+    display: inline-flex;
+    gap: 5px;
+    align-items: center;
+    height: 28px;
+    padding: 0 11px;
+    color: @kw-text-secondary;
+    font-size: 12.5px;
+    line-height: 1;
+    background: #fff;
+    border: 1px solid @border;
+    border-radius: 7px;
+    cursor: pointer;
+    transition:
+      color 0.15s,
+      background 0.15s,
+      border-color 0.15s;
+
+    .anticon {
+      font-size: 11px;
+    }
+
+    &:hover {
+      color: @primary-active;
+      border-color: @primary;
+    }
+
+    &:focus-visible {
+      outline: 2px solid @primary-border;
+      outline-offset: 1px;
+    }
+
+    &.is-on {
+      color: @primary-active;
+      font-weight: 500;
+      background: @primary-soft;
+      border-color: #bfdbfe;
+    }
+  }
+}

@@ -1,5 +1,15 @@
 import { apiRequest } from '@/services/auth';
 
+import type { EffectiveProjectConfig } from './projectConfigTypes';
+export type { EffectiveProjectConfig } from './projectConfigTypes';
+
+/** 仅返回当前有效成员可读的非敏感生效配置；宿主校验登记来源必须属于本项目。 */
+export function queryEffectiveProjectConfigs(projectId: string) {
+  return apiRequest<EffectiveProjectConfig[]>(
+    `/api/current/projects/${encodeURIComponent(projectId)}/configs`,
+  );
+}
+
 export type PlatformProject = {
   id: string;
   projectCode: string;
@@ -92,12 +102,22 @@ export function queryGatewayRoute(projectId: string) {
   return apiRequest<string>(`/api/projects/${projectId}/gateway-route`);
 }
 
-export function queryProjects(params: { current?: number; pageSize?: number; keyword?: string }) {
+export function queryProjects(params: {
+  current?: number;
+  pageSize?: number;
+  keyword?: string;
+  /** 项目状态筛选（ACTIVE / DISABLED / ARCHIVED）；不传不过滤。 */
+  status?: string;
+  /** 只看平台内置或业务项目；不传不过滤。 */
+  builtIn?: boolean;
+}) {
   const search = new URLSearchParams({
     current: String(params.current ?? 1),
     size: String(params.pageSize ?? 10),
   });
   if (params.keyword) search.set('keyword', params.keyword);
+  if (params.status) search.set('status', params.status);
+  if (params.builtIn !== undefined) search.set('builtIn', String(params.builtIn));
   return apiRequest<ProjectPage>(`/api/projects?${search.toString()}`);
 }
 
@@ -188,6 +208,44 @@ export function grantProjectRoleMenus(projectId: string, roleId: string, menuIds
   );
 }
 
+/** 数据范围类型，取值固定（docs/DATA_SCOPE.md §3.1），显示文案走字典 project.data_scope.type。 */
+export type DataScopeType = 'ALL' | 'DEPT_AND_CHILD' | 'DEPT' | 'SELF' | 'CUSTOM_DEPT';
+
+/** 角色在一个受控资源上的数据范围；未配置的资源 scope 为 SELF、configured 为 false。 */
+export type RoleDataScopeItem = {
+  resourceCode: string;
+  resourceName: string;
+  allowedScopes: DataScopeType[];
+  scope: DataScopeType;
+  configured: boolean;
+  includeChild: boolean;
+  deptIds: string[];
+};
+
+export type RoleDataScopes = {
+  roleId: string;
+  roleCode: string;
+  /** 内置 project-admin 只读，固定全部。 */
+  readOnly: boolean;
+  items: RoleDataScopeItem[];
+};
+
+export function queryRoleDataScopes(projectId: string, roleId: string) {
+  return apiRequest<RoleDataScopes>(`/api/projects/${projectId}/roles/${roleId}/data-scopes`);
+}
+
+/** 覆盖保存：请求里没有的资源回到仅本人。 */
+export function saveRoleDataScopes(
+  projectId: string,
+  roleId: string,
+  items: Pick<RoleDataScopeItem, 'resourceCode' | 'scope' | 'includeChild' | 'deptIds'>[],
+) {
+  return apiRequest<RoleDataScopes>(
+    `/api/projects/${projectId}/roles/${roleId}/data-scopes`,
+    jsonRequest('PUT', { items }),
+  );
+}
+
 export function deleteProjectRole(projectId: string, roleId: string) {
   return apiRequest<void>(`/api/projects/${projectId}/roles/${roleId}`, {
     method: 'DELETE',
@@ -228,4 +286,39 @@ function jsonRequest(method: string, input: unknown): RequestInit {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   };
+}
+
+/** 项目显式后端服务登记及其可审核路由片段。 */
+export type BackendService = { serviceCode: string; serviceUrl: string | null; status: string };
+export type GatewayRoutes = { fragments: { serviceCode: string; fragment: string }[] };
+export function queryBackendServices(projectId: string) {
+  return apiRequest<BackendService[]>(`/api/projects/${projectId}/backend-services`);
+}
+export function createBackendService(
+  projectId: string,
+  input: { serviceCode: string; serviceUrl: string },
+) {
+  return apiRequest<BackendService>(
+    `/api/projects/${projectId}/backend-services`,
+    jsonRequest('POST', input),
+  );
+}
+export function updateBackendService(
+  projectId: string,
+  serviceCode: string,
+  serviceUrl: string | null,
+) {
+  return apiRequest<BackendService>(
+    `/api/projects/${projectId}/backend-services/${serviceCode}`,
+    jsonRequest('PUT', { serviceUrl }),
+  );
+}
+export function setBackendServiceStatus(projectId: string, serviceCode: string, status: string) {
+  return apiRequest<BackendService>(
+    `/api/projects/${projectId}/backend-services/${serviceCode}/status`,
+    jsonRequest('PUT', { status }),
+  );
+}
+export function queryGatewayRoutes(projectId: string) {
+  return apiRequest<GatewayRoutes>(`/api/projects/${projectId}/gateway-routes`);
 }

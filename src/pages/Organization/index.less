@@ -1,0 +1,127 @@
+.kaiwu-organization {
+  overflow: hidden;
+  border-radius: 12px;
+
+  > .ant-pro-card-body > .ant-pro-card {
+    min-width: 0;
+    min-height: 480px;
+  }
+
+  .ant-pro-card-header {
+    padding: 22px 24px 14px;
+    gap: 12px;
+  }
+
+  .ant-pro-card-title {
+    font-size: 17px;
+    font-weight: 600;
+  }
+
+  .ant-pro-card-body {
+    padding: 8px 24px 24px;
+  }
+}
+
+.kaiwu-organization-tree {
+  .ant-tree-treenode {
+    padding: 2px 0;
+  }
+
+  .ant-tree-node-content-wrapper {
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    border-radius: 8px;
+  }
+
+  .ant-tree-node-selected {
+    box-shadow: inset 3px 0 #3b82f6;
+  }
+
+  .ant-tree-title {
+    min-width: 0;
+  }
+
+  .ant-tree-iconEle {
+    flex: 0 0 24px;
+    margin-right: 4px;
+  }
+}
+
+.kaiwu-organization-node {
+  max-width: 100%;
+  .ant-tag {
+    margin-inline-end: 0;
+    border-radius: 999px;
+    color: #475569;
+    background: #f1f5f9;
+    white-space: nowrap;
+  }
+}
+
+.kaiwu-organization-members {
+  .ant-pro-card-header {
+    flex-wrap: wrap;
+  }
+
+  .ant-pro-card-extra {
+    max-width: 100%;
+  }
+}
+
+.kaiwu-organization-table {
+  .ant-table-thead > tr > th {
+    color: #64748b;
+    font-size: 13px;
+    font-weight: 600;
+    background: #f8fafc;
+  }
+
+  .ant-table-tbody > tr > td {
+    padding-top: 20px;
+    padding-bottom: 20px;
+  }
+
+  .ant-btn-link {
+    padding-inline: 0;
+  }
+}
+
+.kaiwu-organization-avatar {
+  flex: none;
+  color: #2563eb;
+  background: #eff6ff;
+  border: 1px solid #dbeafe;
+  font-weight: 600;
+}
+
+.kaiwu-organization-table .ant-table-tbody > tr:nth-child(3n + 2) .kaiwu-organization-avatar {
+  color: #15805a;
+  background: #eaf8f1;
+  border-color: #d5f0e2;
+}
+
+.kaiwu-organization-table .ant-table-tbody > tr:nth-child(3n) .kaiwu-organization-avatar {
+  color: #7c3aed;
+  background: #f4efff;
+  border-color: #e9ddff;
+}
+
+@media (max-width: 767px) {
+  .kaiwu-organization-page .ant-page-header-heading-sub-title {
+    max-width: 100%;
+    white-space: normal;
+  }
+
+  .kaiwu-organization > .ant-pro-card-body > .ant-pro-card {
+    min-height: 0;
+  }
+
+  .kaiwu-organization .ant-pro-card-header {
+    padding: 18px 16px 10px;
+  }
+
+  .kaiwu-organization .ant-pro-card-body {
+    padding: 8px 16px 20px;
+  }
+}

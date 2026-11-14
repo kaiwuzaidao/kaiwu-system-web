@@ -48,7 +48,7 @@ test.describe('已上线能力：管理员只读 API 验收', () => {
     }
   });
 
-  test('system 内置项目不可被隐藏，AI 与 GitLab 密钥不回传', async ({ request }) => {
+  test('system 内置项目不可被隐藏，AI 密钥不回传', async ({ request }) => {
     const api = await createAdminApiContext(request);
     try {
       const projectsResponse = await api.get('/api/projects?current=1&size=100');
@@ -64,7 +64,7 @@ test.describe('已上线能力：管理员只读 API 验收', () => {
       expect(system).toBeTruthy();
       expect(system?.status).toBe('ACTIVE');
 
-      for (const path of ['/api/ai/provider', '/api/gitlab/config']) {
+      for (const path of ['/api/ai/provider']) {
         const response = await api.get(path);
         await expectSuccess(response);
         const serialized = JSON.stringify(await response.json());

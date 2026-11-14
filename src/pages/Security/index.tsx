@@ -150,6 +150,22 @@ export default function SecurityPage() {
       render: (_, row) => <DictTag dictCode="security.session.status" value={row.status} />,
     },
     {
+      title: intl.formatMessage({ id: 'security.sessionSource' }),
+      dataIndex: 'sessionSource',
+      search: false,
+      width: 110,
+      render: (_, row) => (
+        <DictTag dictCode="security.session.source" value={row.sessionSource ?? 'WEB'} />
+      ),
+    },
+    {
+      title: intl.formatMessage({ id: 'security.clientName' }),
+      dataIndex: 'clientName',
+      search: false,
+      width: 120,
+      render: (_, row) => row.clientName ?? '-',
+    },
+    {
       title: intl.formatMessage({ id: 'security.sessionId' }),
       dataIndex: 'sessionId',
       search: false,
@@ -271,10 +287,14 @@ export default function SecurityPage() {
         onCancel={() => setOffline(undefined)}
         onOk={async () => {
           if (!offline) return;
-          await forceOffline(offline.sessionId, reason);
-          void message.success(intl.formatMessage({ id: 'security.offlineSuccess' }));
-          setOffline(undefined);
-          sessionRef.current?.reload();
+          try {
+            await forceOffline(offline.sessionId, reason);
+            void message.success(intl.formatMessage({ id: 'security.offlineSuccess' }));
+            setOffline(undefined);
+            sessionRef.current?.reload();
+          } catch (error) {
+            void message.error(error instanceof Error ? error.message : String(error));
+          }
         }}
       >
         <Space direction="vertical" style={{ width: '100%' }}>

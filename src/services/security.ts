@@ -61,6 +61,10 @@ export type OnlineSession = {
   lastSeenAt: string;
   expiresAt: string;
   revokedAt?: string;
+  /** 会话来源：WEB 网页登录 / CLI 设备授权（ADR 0035），只用于展示。 */
+  sessionSource?: string;
+  /** CLI 声明的客户端名称；网页登录为空。 */
+  clientName?: string;
 };
 
 function pageQuery(params: Record<string, unknown>) {

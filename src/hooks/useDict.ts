@@ -2,7 +2,7 @@ import { useIntl } from '@umijs/max';
 import { useEffect, useState } from 'react';
 import type { DictionaryOption } from '@/dictionaries/types';
 import { DICT_FALLBACK } from '@/dictionaries/fallback';
-import { apiRequest } from '@/services/auth';
+import { apiRequest, subscribeSessionChange } from '@/services/auth';
 import { currentLocale, normalizeLocale } from '@/utils/locale';
 
 type EffectiveDictItem = {
@@ -27,7 +27,15 @@ type CacheEntry = {
   status: 'loading' | 'loaded' | 'error';
   options: DictionaryOption[];
   promise?: Promise<DictionaryOption[]>;
+  /** 最近一次读取失败的时间，用于限频重试。 */
+  failedAt?: number;
+  startedAt: number;
 };
+
+/** 失败后至少间隔这么久才允许再次请求，避免每次渲染都打接口。 */
+const RETRY_INTERVAL_MS = 5_000;
+/** 请求超过这个时长仍未返回（如登录态失效时 apiRequest 永不 resolve）视为卡死，允许重发。 */
+const STALL_MS = 15_000;
 
 const cache = new Map<string, CacheEntry>();
 const subscribers = new Map<string, Set<() => void>>();
@@ -65,10 +73,15 @@ function warnFallback(dictCode: string, why: string) {
   );
 }
 
-async function fetchDict(dictCode: string): Promise<DictionaryOption[]> {
+async function fetchDict(
+  dictCode: string,
+  projectId?: string,
+): Promise<{ options: DictionaryOption[]; failed: boolean }> {
   try {
     const data = await apiRequest<EffectiveDict>(
-      `/api/metadata/dicts/effective/${encodeURIComponent(dictCode)}`,
+      projectId
+        ? `/api/current/projects/${encodeURIComponent(projectId)}/dicts/${encodeURIComponent(dictCode)}`
+        : `/api/metadata/dicts/effective/${encodeURIComponent(dictCode)}`,
     );
     const options = data.items
       .filter((item) => item.status === 'ENABLED')
@@ -82,35 +95,65 @@ async function fetchDict(dictCode: string): Promise<DictionaryOption[]> {
       // 字典存在但没有启用中的字典项，等同于不可用。
       warnFallback(dictCode, '后端返回 0 个启用项');
     }
-    return options;
+    return { options, failed: false };
   } catch (reason) {
     // 后端未就绪 / 未 seed / 网络问题：降级到本地 fallback，但不再静默。
     warnFallback(dictCode, `读取失败（${reason instanceof Error ? reason.message : '未知错误'}）`);
-    return fallbackOptions(dictCode);
+    return { options: fallbackOptions(dictCode), failed: true };
   }
 }
 
-function cacheKey(dictCode: string, locale: string) {
-  return `${normalizeLocale(locale)}:${dictCode}`;
+function cacheKey(dictCode: string, locale: string, projectId?: string) {
+  return `${normalizeLocale(locale)}:${projectId ?? 'global'}:${dictCode}`;
 }
 
-function loadDict(dictCode: string, locale: string) {
-  const key = cacheKey(dictCode, locale);
+function shouldReload(entry: CacheEntry) {
+  const now = Date.now();
+  if (entry.status === 'error') return now - (entry.failedAt ?? 0) >= RETRY_INTERVAL_MS;
+  if (entry.status === 'loading') return now - entry.startedAt >= STALL_MS;
+  return false;
+}
+
+function loadDict(dictCode: string, locale: string, projectId?: string) {
+  const key = cacheKey(dictCode, locale, projectId);
   const existing = cache.get(key);
-  if (existing && existing.status !== 'error') return existing;
+  if (existing && !shouldReload(existing)) return existing;
+  // 失败过的条目保留上次的 fallback 选项，重试期间页面不闪空。
   const entry: CacheEntry = {
     status: 'loading',
-    options: fallbackOptions(dictCode),
+    options: existing?.options ?? fallbackOptions(dictCode),
+    startedAt: Date.now(),
   };
-  entry.promise = fetchDict(dictCode).then((options) => {
-    entry.status = 'loaded';
+  entry.promise = fetchDict(dictCode, projectId).then(({ options, failed }) => {
+    // 被更新的请求取代后，旧响应不再覆盖。
+    if (cache.get(key) !== entry) return entry.options;
     entry.options = options.length > 0 ? options : fallbackOptions(dictCode);
+    if (failed) {
+      // 失败不再当作「已加载」永久缓存，下次渲染限频重试。
+      entry.status = 'error';
+      entry.failedAt = Date.now();
+    } else {
+      entry.status = 'loaded';
+    }
     notify(dictCode);
     return entry.options;
   });
   cache.set(key, entry);
   return entry;
 }
+
+/**
+ * 登录 / 会话变化后，丢弃所有没成功加载的条目：登录前或登录瞬间发出的请求可能因 401
+ * 失败或被挂起，不清掉就会在整个 SPA 生命周期内一直显示原始 code。
+ * token 刷新同样会触发这里，所以已成功的条目保持不动。
+ */
+subscribeSessionChange(() => {
+  cache.forEach((entry, key) => {
+    if (entry.status === 'loaded' && key.includes(':global:')) return;
+    cache.delete(key);
+    notify(key.slice(key.lastIndexOf(':') + 1));
+  });
+});
 
 /**
  * 消费受管字典：优先取后端 scope=0 的 global 字典，加载中或失败时返回本地
@@ -123,10 +166,10 @@ function loadDict(dictCode: string, locale: string) {
  * label_i18n），且优先级高于服务端结果，会让管理员在字典管理页改了引用资源却看不到
  * 效果。现在响应内容就是最终显示内容，Network 面板看到的即所见。</p>
  */
-export function useDict(dictCode: string) {
+export function useDict(dictCode: string, projectId?: string) {
   const intl = useIntl();
   const [, setTick] = useState(0);
-  const entry = loadDict(dictCode, intl.locale);
+  const entry = loadDict(dictCode, intl.locale, projectId);
 
   useEffect(() => {
     const unsubscribe = subscribe(dictCode, () => setTick((n) => n + 1));

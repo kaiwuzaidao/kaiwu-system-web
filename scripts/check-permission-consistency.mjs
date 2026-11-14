@@ -12,11 +12,13 @@
  * 关于 seed 的判定：只认「代码能自举出来的」——增量 SQL 与 SystemProjectBootstrap。
  * 运行库里手工建的菜单不算数，因为全新安装复现不出来。
  *
- * 退出码：0 全部通过或无法比对（后端仓库不在旁边）；1 发现不一致。
+ * 退出码：0 全部通过或无法比对（后端仓库不在旁边）；1 发现不一致，
+ * 或后端源码在旁边却定位不到 SystemProjectBootstrap（宁可报错也不带着残缺 seed 继续比对）。
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { locateJavaClass } from './lib/java-class-locator.mjs';
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // 默认按四仓平级工作区定位后端；KAIWU_SERVICE_DIR 可覆盖（CI 或非标准布局）。
@@ -26,7 +28,6 @@ const serviceDir = process.env.KAIWU_SERVICE_DIR
 const frontendSrc = join(webRoot, 'src');
 const backendSrc = join(serviceDir, 'kaiwu-system-domain/src/main/java');
 const sqlDir = join(serviceDir, 'sql/increment');
-const bootstrapFile = join(backendSrc, 'com/kaiwu/module/project/SystemProjectBootstrap.java');
 
 /** 权限码形状：三段，全小写，中间用冒号。 */
 const CODE = /^[a-z][a-z0-9-]*:[a-z0-9-]+:[a-z0-9_-]+$/;
@@ -126,7 +127,14 @@ function readSeededCodes() {
       collect(readFileSync(join(sqlDir, name), 'utf8'));
     }
   }
-  if (existsSync(bootstrapFile)) collect(readFileSync(bootstrapFile, 'utf8'));
+  // 按类名定位：Bootstrap 的包路径改过（module/project → module/project/lifecycle），
+  // 写死路径时读不到它，所有只在 Bootstrap 里 seed 的权限码都会被误报为未 seed。
+  const bootstrap = locateJavaClass(backendSrc, 'SystemProjectBootstrap');
+  if ('error' in bootstrap) {
+    fail(`${bootstrap.error}，菜单 seed 来源不完整，跨仓比对中止。`, []);
+    return null;
+  }
+  collect(readFileSync(bootstrap.file, 'utf8'));
   return codes;
 }
 
@@ -148,6 +156,7 @@ if (!existsSync(backendSrc)) {
 
 const backend = readBackendCodes();
 const seeded = readSeededCodes();
+if (!seeded) process.exit(1);
 
 // 检查二：前端用的权限码，后端必须真的在校验。
 // 否则前端以为自己在做权限控制，后端其实对所有人放行。

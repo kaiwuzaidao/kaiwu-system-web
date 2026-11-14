@@ -49,3 +49,37 @@ export function openProjectEntry(projectId: string, mode: ProjectOpenMode): void
   }
   window.location.assign(path);
 }
+
+/** 项目入口判定只需要这几个字段，不依赖服务层类型，避免 utils 反向依赖 services。 */
+export type EntryProject = {
+  id: string;
+  projectCode: string;
+  builtIn: boolean;
+  backendUrl?: string;
+};
+
+/**
+ * 当前用户能进入的项目：内置 system 就是平台本身，恒定可进；
+ * 其余项目没有后台入口就无处可去，不列出来。顶栏切换弹窗与登录后的项目选择页共用这一条规则。
+ */
+export function enterableProjects<T extends EntryProject>(projects: readonly T[]): T[] {
+  return projects.filter((project) => project.builtIn || project.backendUrl);
+}
+
+/** 按项目编码在「已有权限的项目」里查找；编码只做相等比较，不参与任何跳转地址拼接。 */
+export function findEnterableByCode<T extends EntryProject>(
+  projects: readonly T[],
+  projectCode: string,
+): T | undefined {
+  return enterableProjects(projects).find((project) => project.projectCode === projectCode);
+}
+
+/** 进入项目：平台（内置 system）回工作台，业务项目走 /workspace 宿主页。 */
+export function enterProject(project: EntryProject, mode: ProjectOpenMode): void {
+  if (project.builtIn) {
+    if (mode === 'newTab') window.open('/', '_blank');
+    else window.location.assign('/');
+    return;
+  }
+  openProjectEntry(project.id, mode);
+}

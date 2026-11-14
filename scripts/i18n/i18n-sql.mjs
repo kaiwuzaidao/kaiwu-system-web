@@ -66,8 +66,33 @@ function parseTranslations(expression) {
   return result;
 }
 
-function parseSeedResources(sql) {
+/** V127 基线按真实列顺序导出，翻译字典以 JSON 字面量保存。 */
+function parseBaselineResources(sql) {
+  const header = /^INSERT INTO `sys_i18n_message` \(([^)]+)\) VALUES\n/gmu;
   const rows = [];
+  for (const match of sql.matchAll(header)) {
+    const columns = match[1].split(', ').map((column) => column.replaceAll('`', ''));
+    const values = splitSqlRow(sql.slice(match.index + match[0].length));
+    if (!values || values.length !== columns.length) throw new Error('无法解析基线国际化种子行');
+    const row = Object.fromEntries(columns.map((name, i) => [name, values[i]]));
+    const literal = (value) => {
+      if (!/^'(?:''|[^'])*'$/su.test(value)) throw new Error('无效的基线 SQL 字符串');
+      return unescapeSql(value.slice(1, -1)).replaceAll('\\\\', '\\');
+    };
+    rows.push({
+      key: literal(row.message_key),
+      description: row.description === 'NULL' ? undefined : literal(row.description),
+      defaultText: literal(row.default_text),
+      translations: new Map(Object.entries(JSON.parse(literal(row.translations_json)))),
+      publicVisible: row.public_visible === '1',
+      status: literal(row.status),
+    });
+  }
+  return rows;
+}
+
+function parseSeedResources(sql) {
+  const rows = parseBaselineResources(sql);
   for (const line of sql.split(/\r?\n/u)) {
     if (!/^\s*\(\d{15,}\s*,/u.test(line)) continue;
     const args = splitSqlRow(line);
@@ -91,6 +116,17 @@ function parseSeedResources(sql) {
 
 function parseGeneratedButtonMenuResources(sql, sourceName, fail) {
   const keys = new Set();
+  for (const row of parseBaselineResources(sql)) {
+    const permission = row.description?.match(
+      /^内置按钮菜单名称：(system:[a-z0-9-]+:[a-z0-9-]+)$/u,
+    )?.[1];
+    if (!permission) continue;
+    const key = `menu.system.permission.${permission.replaceAll(':', '.')}`;
+    if (row.key !== key || !row.translations.get('en-US') || !row.translations.get('ja-JP')) {
+      fail(`${sourceName} 的内置按钮资源或翻译不完整：${key}`);
+    }
+    keys.add(key);
+  }
   for (const line of sql.split(/\r?\n/u)) {
     const match = line.match(
       /(?:SELECT|UNION ALL SELECT)\s+\d+(?:\s+AS\s+sort_no)?\s*,\s*'(system:[a-z0-9-]+:[a-z0-9-]+)'/u,
@@ -101,6 +137,18 @@ function parseGeneratedButtonMenuResources(sql, sourceName, fail) {
     if (!line.includes("'en-US'") || !line.includes("'ja-JP'")) {
       fail(`${sourceName} 的内置按钮资源缺少 en-US 或 ja-JP：${key}`);
     }
+  }
+  return keys;
+}
+
+/** 迁移里 `DELETE FROM sys_i18n_message ... message_key IN (...)` 删除的 key。 */
+export function parseDeletedResourceKeys(sql) {
+  const keys = [];
+  const withoutComments = sql.replace(/^\s*--.*$/gmu, '');
+  for (const statement of withoutComments.matchAll(
+    /DELETE\s+FROM\s+sys_i18n_message\b[^;]*?message_key\s+IN\s*\(([^)]*)\)/giu,
+  )) {
+    for (const key of statement[1].matchAll(/'([^']+)'/gu)) keys.push(key[1]);
   }
   return keys;
 }
@@ -131,6 +179,11 @@ export function loadI18nSqlCatalog({ serviceRoot, primary, secondary, fail }) {
           fail(`国际化资源的插值占位符与默认文案不一致：${row.key}（${locale}）`);
         }
       }
+    }
+    // 后来的迁移可以删除已下线功能的资源：增量按顺序回放，快照里就不应再有这些 key。
+    for (const key of parseDeletedResourceKeys(fs.readFileSync(migrationPath, 'utf8'))) {
+      primaryCatalog.delete(key);
+      secondaryCatalog.delete(key);
     }
   }
   const checkedKeys = primaryCatalog.size;

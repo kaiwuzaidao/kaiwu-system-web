@@ -196,6 +196,7 @@ export default function UsersPage() {
     >
       <ProTable<PlatformUser>
         sticky
+        scroll={{ x: 850 }}
         rowKey="id"
         actionRef={actionRef}
         columns={columns}

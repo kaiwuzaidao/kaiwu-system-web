@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { loadI18nSqlCatalog, placeholders } from './i18n/i18n-sql.mjs';
+import { locateJavaClass } from './lib/java-class-locator.mjs';
 import {
   checkStaticMessageKeys,
   checkVisibleHardcoding,
@@ -12,7 +13,9 @@ import {
 const ROOT = process.cwd();
 const PRIMARY = 'zh-CN';
 const SECONDARY = 'en-US';
-const SERVICE_ROOT = path.join(ROOT, '..', 'kaiwu-system-service');
+const SERVICE_ROOT = process.env.KAIWU_SERVICE_DIR
+  ? path.resolve(process.env.KAIWU_SERVICE_DIR)
+  : path.join(ROOT, '..', 'kaiwu-system-service');
 const MIGRATED_UI_FILES = [
   ...collectUiFiles(ROOT, 'src/components'),
   ...collectUiFiles(ROOT, 'src/pages'),
@@ -163,15 +166,12 @@ function checkBuiltInDictionaryTypeCoverage() {
     'common.status',
     'common.tag_color',
     'config.value.type',
-    'gitlab.test.status',
     'notification.type',
     'platform.locale',
     'platform.menu.type',
     'project.generation.mode',
     'project.generation.status',
-    'project.health.verdict',
     'project.member.status',
-    'project.repository.push.status',
     'project.status',
     'scheduler.execution.status',
     'security.login.status',
@@ -190,7 +190,10 @@ function checkMenuCoverage() {
   const insertBlocks = (sql, table) =>
     [
       ...sql.matchAll(
-        new RegExp(String.raw`INSERT\s+(?:IGNORE\s+)?INTO\s+${table}\b([\s\S]*?);\n`, 'gu'),
+        new RegExp(
+          String.raw`INSERT\s+(?:IGNORE\s+)?INTO\s+\x60?${table}\x60?\s+([\s\S]*?);\n`,
+          'gu',
+        ),
       ),
     ].map((match) => match[1]);
   const routes = new Set();
@@ -225,24 +228,21 @@ function checkMenuCoverage() {
       routes.add(match[1]);
     }
   }
-  const bootstrap = path.join(
-    SERVICE_ROOT,
-    'kaiwu-system-domain/src/main/java/com/kaiwu/module/project/SystemProjectBootstrap.java',
-  );
-  if (!fs.existsSync(bootstrap)) {
-    fail('未找到 SystemProjectBootstrap，内置菜单覆盖校验失效');
+  // 按类名定位而不是写死包路径：后端挪过包（module/project → module/project/lifecycle），
+  // 写死路径会让这项校验在基线上直接失效。
+  const backendSrc = path.join(SERVICE_ROOT, 'kaiwu-system-domain/src/main/java');
+  const bootstrap = locateJavaClass(backendSrc, 'SystemProjectBootstrap');
+  if ('error' in bootstrap) {
+    fail(`${bootstrap.error}，内置菜单覆盖校验失效`);
     return 0;
   }
-  const bootstrapSource = fs.readFileSync(bootstrap, 'utf8');
-  const mapperPath = path.join(
-    SERVICE_ROOT,
-    'kaiwu-system-domain/src/main/java/com/kaiwu/module/project/mapper/SystemBootstrapMapper.java',
-  );
-  if (!fs.existsSync(mapperPath)) {
-    fail('未找到 SystemBootstrapMapper，legacy 菜单导入规则校验失效');
+  const bootstrapSource = fs.readFileSync(bootstrap.file, 'utf8');
+  const mapper = locateJavaClass(backendSrc, 'SystemBootstrapMapper');
+  if ('error' in mapper) {
+    fail(`${mapper.error}，legacy 菜单导入规则校验失效`);
     return 0;
   }
-  const mapperSource = fs.readFileSync(mapperPath, 'utf8');
+  const mapperSource = fs.readFileSync(mapper.file, 'utf8');
   const excludedPermissions = new Set(
     [...mapperSource.matchAll(/permission_code\s*<>\s*'(system:[a-z0-9-]+:[a-z0-9-]+)'/gu)].map(
       (match) => match[1],

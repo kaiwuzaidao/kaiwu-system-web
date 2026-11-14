@@ -17,6 +17,7 @@ import {
   queryCurrentUser,
   type CurrentUser,
 } from '@/services/auth';
+import { kaiwuPalette } from '@/theme/tokens';
 
 type PasswordForm = {
   oldPassword: string;
@@ -81,15 +82,13 @@ export default function ProfilePage() {
     >
       <div
         style={{
-          borderRadius: 12,
-          padding: '28px 32px',
+          padding: '4px 0 20px',
           marginBottom: 16,
-          background: 'linear-gradient(120deg, #4f46e5 0%, #6d5bef 40%, #7c3aed 100%)',
-          color: '#fff',
+          borderBottom: `1px solid ${kaiwuPalette.border}`,
+          color: kaiwuPalette.text,
           display: 'flex',
           alignItems: 'center',
           gap: 20,
-          boxShadow: '0 12px 28px rgba(79,70,229,0.22)',
         }}
       >
         <div
@@ -288,7 +287,7 @@ export default function ProfilePage() {
                     <div
                       style={{
                         fontSize: 12,
-                        color: 'rgba(0,0,0,0.45)',
+                        color: kaiwuPalette.textTertiary,
                         marginBottom: 8,
                         display: 'flex',
                         alignItems: 'center',
@@ -309,9 +308,9 @@ export default function ProfilePage() {
                             margin: 0,
                             fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
                             fontSize: 12,
-                            background: 'rgba(79,70,229,0.06)',
-                            border: '1px solid rgba(79,70,229,0.18)',
-                            color: '#4f46e5',
+                            background: kaiwuPalette.primarySoft,
+                            border: `1px solid ${kaiwuPalette.primaryBorder}`,
+                            color: '#3B82F6',
                           }}
                         >
                           {code}

@@ -52,22 +52,38 @@ export function queryI18nLocales(locale = 'zh-CN') {
   return apiRequest<I18nLocale[]>(`/api/i18n/locales?locale=${encodeURIComponent(locale)}`);
 }
 
-export function queryI18nResources() {
-  return apiRequest<I18nResource[]>('/api/i18n/resources');
+/**
+ * 资源接口的路径前缀：不传项目为平台资源（system:i18n:* 权限），
+ * 传项目 ID 为该项目的资源（ADR 0037，仅项目管理员，由服务端判定）。
+ */
+function resourceBase(projectId?: string) {
+  return projectId ? `/api/projects/${encodeURIComponent(projectId)}/i18n` : '/api/i18n';
 }
 
-export function saveI18nResource(input: Partial<I18nResource>) {
-  return apiRequest<I18nResource>('/api/i18n/resources', {
+export function queryI18nResources(projectId?: string) {
+  return apiRequest<I18nResource[]>(`${resourceBase(projectId)}/resources`);
+}
+
+/** 表单选择器用的只读目录，登录即可读；管理页仍用 queryI18nResources（需 system:i18n:list）。 */
+export function queryI18nResourceOptions() {
+  return apiRequest<I18nResource[]>('/api/i18n/resources/options');
+}
+
+export function saveI18nResource(input: Partial<I18nResource>, projectId?: string) {
+  return apiRequest<I18nResource>(`${resourceBase(projectId)}/resources`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   });
 }
 
-export function deleteI18nResource(id: string, version: number) {
-  return apiRequest<void>(`/api/i18n/resources/${encodeURIComponent(id)}?version=${version}`, {
-    method: 'DELETE',
-  });
+export function deleteI18nResource(id: string, version: number, projectId?: string) {
+  return apiRequest<void>(
+    `${resourceBase(projectId)}/resources/${encodeURIComponent(id)}?version=${version}`,
+    {
+      method: 'DELETE',
+    },
+  );
 }
 
 /**
@@ -76,10 +92,10 @@ export function deleteI18nResource(id: string, version: number) {
  * 开放一门新语言要求译文全覆盖，平台侧近千条无法逐条手填，
  * 导出后离线翻译再整表导回是唯一可行路径。
  */
-export function exportI18nTranslations(locale: string) {
+export function exportI18nTranslations(locale: string, projectId?: string) {
   return downloadApiFile(
-    `/api/i18n/translations/export?locale=${encodeURIComponent(locale)}`,
-    `kaiwu-i18n-${locale}.xlsx`,
+    `${resourceBase(projectId)}/translations/export?locale=${encodeURIComponent(locale)}`,
+    projectId ? `kaiwu-i18n-project-${locale}.xlsx` : `kaiwu-i18n-${locale}.xlsx`,
   );
 }
 
@@ -90,11 +106,11 @@ export type I18nImportResult = {
 };
 
 /** 导入译文；只写目标语言那一列，其余字段仍由界面维护。 */
-export function importI18nTranslations(locale: string, file: File) {
+export function importI18nTranslations(locale: string, file: File, projectId?: string) {
   const form = new FormData();
   form.append('file', file);
   return apiRequest<I18nImportResult>(
-    `/api/i18n/translations/import?locale=${encodeURIComponent(locale)}`,
+    `${resourceBase(projectId)}/translations/import?locale=${encodeURIComponent(locale)}`,
     { method: 'POST', body: form },
   );
 }

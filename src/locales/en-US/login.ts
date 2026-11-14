@@ -3,12 +3,12 @@ export default {
   'login.hero.title.first': 'Let AI accelerate delivery,',
   'login.hero.title.second': 'keep engineering in control',
   'login.hero.description':
-    'Put AI inside controlled blueprints and deterministic scaffolding. It accelerates the first version, while your team retains control of access, project boundaries, and code ownership in your own Git repository.',
+    'AI writes, the platform guards: controlled blueprints generate independent frontend and backend repositories that ship with access, migration, and CI constraints, so your team keeps iterating with any AI coding tool.',
   'login.steps.title': 'Four steps to controlled AI development',
   'login.steps.create.title': 'Create a project',
   'login.steps.create.description':
     'Register the project and define members, roles, and boundaries',
-  'login.steps.generate.title': 'Generate the first version',
+  'login.steps.generate.title': 'Generate a deliverable first version',
   'login.steps.generate.description':
     'Describe the business or import DDL for maintainable frontends and backends',
   'login.steps.deliver.title': 'Deliver to your repository',
@@ -19,7 +19,7 @@ export default {
     'Built-in engineering constraints let your team continue with its preferred AI coding tools',
   'login.highlight.permission': 'Controlled AI generation, clear engineering boundaries',
   'login.highlight.isolation': 'Independent repositories, databases, and delivery paths',
-  'login.highlight.oneshot': 'The platform never writes back to your repository',
+  'login.highlight.oneshot': 'Your code stays yours; the platform never overwrites it',
   'login.form.title': 'Sign in to Kaiwu',
   'login.form.subtitle': 'Continue with your administrator account',
   'login.form.submit': 'Sign in',

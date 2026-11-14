@@ -85,7 +85,6 @@ test.describe.serial('项目开通失败恢复', () => {
       await page.getByLabel('Java 包名').fill(packageName);
       await page.getByRole('button', { name: '下一步' }).click();
       await page.getByRole('button', { name: '下一步' }).click();
-      await page.getByText('基础脚手架', { exact: true }).click();
       await page.getByRole('button', { name: '下一步' }).click();
       await page.getByRole('button', { name: '创建并生成' }).click();
 

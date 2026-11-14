@@ -1,62 +1,58 @@
 import { useIntl } from '@umijs/max';
-import { Alert, App, Modal, Spin, Typography } from 'antd';
+import { Alert, App, Button, Empty, Modal, Space, Spin, Typography } from 'antd';
 import { useEffect, useState } from 'react';
-import { queryGatewayRoute, type PlatformProject } from '@/services/projects';
+import { queryGatewayRoutes, type GatewayRoutes, type PlatformProject } from '@/services/projects';
 
-type Props = {
-  project?: PlatformProject;
-  onClose: () => void;
-};
-
-/**
- * 展示该项目的 Gateway 显式路由片段，供运维复制进受管配置。
- *
- * <p>不让运维手写这段：metadata 三项是权限事实，漏掉 accessMode 或 projectCode
- * 会让路由被 Gateway 拒绝，而错误信息指向的是路由配置、不是缺了哪一项。</p>
- */
+type Props = { project?: PlatformProject; onClose: () => void };
+/** 按服务展示各自可审核的 Gateway 片段，不自动发布。 */
 export default function GatewayRouteDialog({ project, onClose }: Props) {
   const intl = useIntl();
   const { message } = App.useApp();
   const [loading, setLoading] = useState(false);
-  const [fragment, setFragment] = useState('');
+  const [fragments, setFragments] = useState<GatewayRoutes['fragments']>([]);
   const [error, setError] = useState('');
-
   useEffect(() => {
     if (!project) {
-      setFragment('');
+      setFragments([]);
       setError('');
       return;
     }
+    let active = true;
     setLoading(true);
-    queryGatewayRoute(project.id)
+    queryGatewayRoutes(project.id)
       .then((value) => {
-        setFragment(value);
-        setError('');
+        if (active) {
+          setFragments(value.fragments);
+          setError('');
+        }
       })
       .catch((reason) => {
-        setFragment('');
-        setError(reason instanceof Error ? reason.message : String(reason));
+        if (active) {
+          setFragments([]);
+          setError(reason instanceof Error ? reason.message : String(reason));
+        }
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [project]);
-
-  const copy = async () => {
+  const copy = async (value: string) => {
     try {
-      await navigator.clipboard.writeText(fragment);
+      await navigator.clipboard.writeText(value);
       void message.success(intl.formatMessage({ id: 'projects.gatewayRoute.copied' }));
     } catch {
       void message.error(intl.formatMessage({ id: 'projects.gatewayRoute.copyFailed' }));
     }
   };
-
   return (
     <Modal
       open={!!project}
       title={intl.formatMessage({ id: 'projects.gatewayRoute' })}
       onCancel={onClose}
-      onOk={() => void copy()}
-      okText={intl.formatMessage({ id: 'projects.gatewayRoute.copy' })}
-      okButtonProps={{ disabled: !fragment }}
+      footer={null}
       width={720}
     >
       <Spin spinning={loading}>
@@ -68,10 +64,22 @@ export default function GatewayRouteDialog({ project, onClose }: Props) {
         />
         {error ? (
           <Alert type="error" showIcon message={error} />
+        ) : fragments.length === 0 && !loading ? (
+          <Empty />
         ) : (
-          <Typography.Paragraph>
-            <pre style={{ margin: 0, maxHeight: 360, overflow: 'auto' }}>{fragment}</pre>
-          </Typography.Paragraph>
+          fragments.map((item) => (
+            <div key={item.serviceCode} style={{ marginBottom: 16 }}>
+              <Space>
+                <Typography.Text strong>{item.serviceCode}</Typography.Text>
+                <Button onClick={() => void copy(item.fragment)}>
+                  {intl.formatMessage({ id: 'projects.gatewayRoute.copy' })}
+                </Button>
+              </Space>
+              <pre style={{ margin: '8px 0', maxHeight: 360, overflow: 'auto' }}>
+                {item.fragment}
+              </pre>
+            </div>
+          ))
         )}
       </Spin>
     </Modal>

@@ -1,39 +1,48 @@
 import {
-  AppstoreAddOutlined,
   AppstoreOutlined,
   CheckCircleFilled,
+  EllipsisOutlined,
   IdcardOutlined,
   LogoutOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { history, useIntl } from '@umijs/max';
-import { Avatar, Dropdown, Empty, Modal, Segmented, Skeleton, Typography } from 'antd';
-import { useEffect, useState, type ReactNode } from 'react';
+import { history, useIntl, useLocation } from '@umijs/max';
+import { Button, Avatar, Dropdown, Empty, Modal, Segmented, Skeleton, Typography } from 'antd';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import NotificationBell from '@/components/NotificationBell';
+import LineIcon from '@/components/LineIcon';
+import { kaiwuPalette, kaiwuBrand } from '@/theme/tokens';
+import {
+  requestAgentMode,
+  isAgentVisible,
+  subscribeAgentVisibility,
+} from '@/components/AgentDock/mode';
 import GlobalSearch from '@/components/GlobalSearch';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
-import { currentUserSnapshot, logout } from '@/services/auth';
+import {
+  currentUserSnapshot,
+  logout,
+  queryNavigationMenus,
+  type NavigationMenu,
+} from '@/services/auth';
 import { queryCurrentProjects, type PlatformProject } from '@/services/projects';
 import {
+  enterableProjects,
   openProjectEntry,
   readProjectOpenMode,
   writeProjectOpenMode,
   type ProjectOpenMode,
 } from '@/utils/projectEntry';
 
-/**
- * 侧边栏底部区域（ProLayout side 布局下 rightContentRender 渲染在此）。
- *
- * 侧边栏只有 216px，三个元素横排会把用户名挤到换行，因此改为三行：
- * 搜索、切换项目、用户信息 + 站内信。
- *
- * 切换项目是独立一行而不是收进用户菜单：跨项目工作时它是高频动作，
- * 藏在头像下拉里要点两次；原先那一项还只是跳回工作台，等于再挑一次。
- */
-export default function RightContent() {
+/** 顶栏共用搜索、项目切换与用户操作；窄屏保留可访问的紧凑入口。 */
+export default function RightContent({
+  aiMode = false,
+  onClassic,
+}: { aiMode?: boolean; onClassic?: () => void } = {}) {
   const user = currentUserSnapshot();
   const intl = useIntl();
   const [switching, setSwitching] = useState(false);
+  const agentVisible = useSyncExternalStore(subscribeAgentVisibility, isAgentVisible);
 
   const signOut = async () => {
     await logout();
@@ -41,27 +50,51 @@ export default function RightContent() {
   };
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 4,
-        width: '100%',
-        padding: 8,
-        borderTop: '1px solid #f0f0f0',
-      }}
-    >
-      <GlobalSearch block />
-      <ProjectSwitcher open={switching} onClose={() => setSwitching(false)} />
-      <SidebarAction
-        icon={<AppstoreAddOutlined />}
-        label={intl.formatMessage({ id: 'layout.user.switchProject' })}
+    <div className="kaiwu-header-actions">
+      <Button
+        className="kaiwu-project-context kaiwu-header-action"
+        icon={<LineIcon name="layers" size={14} />}
+        aria-label={intl.formatMessage({ id: 'layout.user.switchProject' })}
         onClick={() => setSwitching(true)}
-      />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+      >
+        <span className="kaiwu-header-action-label">
+          {intl.formatMessage({ id: 'layout.workspace' })} · {kaiwuBrand.shortName}
+        </span>
+        <LineIcon name="down" size={14} className="kaiwu-header-caret" />
+      </Button>
+      <GlobalSearch block active={aiMode || !agentVisible} />
+      <NotificationBell compact />
+      {user?.permissions.includes('system:agent:ask') && (
+        <div
+          className="kaiwu-mode-switch"
+          role="group"
+          aria-label={intl.formatMessage({ id: 'agent.dock.title' })}
+        >
+          <Button
+            type="text"
+            className={aiMode ? 'agent-dock-exit' : undefined}
+            aria-pressed={!aiMode}
+            icon={<LineIcon name="grid" size={15} />}
+            onClick={onClassic}
+          >
+            {intl.formatMessage({ id: 'agent.mode.classic' })}
+          </Button>
+          <Button
+            type="text"
+            className="kaiwu-header-action"
+            aria-pressed={aiMode}
+            icon={<LineIcon name="spark" size={15} />}
+            aria-label={intl.formatMessage({ id: 'agent.mode.enter' })}
+            onClick={aiMode ? undefined : requestAgentMode}
+          >
+            {intl.formatMessage({ id: 'agent.dock.title' })}
+          </Button>
+        </div>
+      )}
+      <ProjectSwitcher open={switching} onClose={() => setSwitching(false)} />
+      <div className="kaiwu-header-user">
         <UserMenu user={user} onSignOut={signOut} />
         <LanguageSwitcher compact />
-        <NotificationBell compact />
       </div>
     </div>
   );
@@ -70,16 +103,20 @@ export default function RightContent() {
 function UserMenu({
   user,
   onSignOut,
+  compact = false,
+  caption,
 }: {
   user?: ReturnType<typeof currentUserSnapshot>;
   onSignOut: () => Promise<void>;
+  compact?: boolean;
+  /** 侧栏账号行的第二行（登录名）；有值时右侧显示「更多」提示。 */
+  caption?: string;
 }) {
   const signOut = onSignOut;
   const intl = useIntl();
   return (
     <Dropdown
-      // 触发器在侧边栏底部，必须向上弹出，否则菜单会被裁在视口外。
-      placement="topLeft"
+      placement="bottomRight"
       trigger={['click']}
       menu={{
         items: [
@@ -99,8 +136,13 @@ function UserMenu({
         ],
       }}
     >
-      <div
+      <button
+        type="button"
+        className={`kaiwu-user-menu${compact ? ' is-compact' : ''}`}
+        aria-label={intl.formatMessage({ id: 'layout.user.profile' })}
         style={{
+          border: 0,
+          background: 'transparent',
           display: 'flex',
           alignItems: 'center',
           gap: 8,
@@ -123,7 +165,7 @@ function UserMenu({
         <Avatar
           size={26}
           style={{
-            background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+            background: kaiwuPalette.primary,
             color: '#fff',
             fontSize: 12,
             flexShrink: 0,
@@ -132,62 +174,20 @@ function UserMenu({
         >
           {user?.displayName?.[0] ?? user?.username?.[0]}
         </Avatar>
-        <Typography.Text
-          ellipsis={{ tooltip: user?.displayName ?? user?.username }}
-          style={{ fontSize: 13, flex: 1, minWidth: 0 }}
-        >
-          {user?.displayName ??
-            user?.username ??
-            intl.formatMessage({ id: 'layout.user.notLoggedIn' })}
-        </Typography.Text>
-      </div>
+        <span className="kaiwu-user-menu-copy">
+          <Typography.Text
+            ellipsis={{ tooltip: user?.displayName ?? user?.username }}
+            style={{ fontSize: 13, flex: 1, minWidth: 0 }}
+          >
+            {user?.displayName ??
+              user?.username ??
+              intl.formatMessage({ id: 'layout.user.notLoggedIn' })}
+          </Typography.Text>
+          {caption && <span className="kaiwu-user-menu-caption">{caption}</span>}
+        </span>
+        {caption && <EllipsisOutlined className="kaiwu-user-menu-more" />}
+      </button>
     </Dropdown>
-  );
-}
-
-/** 侧栏底部的行按钮，高度、圆角与 hover 底色与下方用户行保持一致。 */
-function SidebarAction({
-  icon,
-  label,
-  onClick,
-}: {
-  icon: ReactNode;
-  label: string;
-  onClick: () => void;
-}) {
-  const [hover, setHover] = useState(false);
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      onClick={onClick}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          onClick();
-        }
-      }}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        height: 40,
-        padding: '0 8px',
-        borderRadius: 8,
-        cursor: 'pointer',
-        fontSize: 13,
-        color: hover ? '#4f46e5' : 'rgba(0,0,0,0.65)',
-        background: hover ? 'rgba(79,70,229,0.08)' : 'transparent',
-        transition: 'background 0.15s ease, color 0.15s ease',
-      }}
-    >
-      <span style={{ display: 'flex', width: 26, justifyContent: 'center', flexShrink: 0 }}>
-        {icon}
-      </span>
-      <span style={{ flex: 1, minWidth: 0 }}>{label}</span>
-    </div>
   );
 }
 
@@ -200,7 +200,7 @@ type SwitchTarget = {
 };
 
 /**
- * 项目切换弹窗。与业务子后台（如 reimburse）的同名弹窗保持一致的卡片式样，
+ * 项目切换弹窗。与业务子后台（如 order-center）的同名弹窗保持一致的卡片式样，
  * 使两边看起来是一家人。
  *
  * 副标题取项目自身的 backendLabel/projectCode（数据，不是文案），当前项用图标
@@ -227,10 +227,8 @@ function ProjectSwitcher({ open, onClose }: { open: boolean; onClose: () => void
       .finally(() => setLoading(false));
   }, [open]);
 
-  const targets: SwitchTarget[] = (projects ?? [])
-    // 内置 system 就是当前所在的平台，恒定展示且标为当前；
-    // 其余项目没有 backendUrl 就无处可去，不列出来。
-    .filter((project) => project.builtIn || project.backendUrl)
+  const targets: SwitchTarget[] = enterableProjects(projects ?? [])
+    // 内置 system 就是当前所在的平台，恒定展示且标为当前。
     .map((project) => ({
       key: project.id,
       name: project.projectName,
@@ -323,9 +321,9 @@ function SwitchCard({ item }: { item: SwitchTarget }) {
         padding: 16,
         borderRadius: 8,
         cursor: item.current ? 'default' : 'pointer',
-        border: `1px solid ${active ? '#4f46e5' : '#f0f0f0'}`,
-        background: item.current ? 'rgba(79,70,229,0.04)' : '#fff',
-        boxShadow: active ? '0 4px 12px rgba(79,70,229,0.12)' : 'none',
+        border: `1px solid ${active ? kaiwuPalette.primary : '#f0f0f0'}`,
+        background: item.current ? kaiwuPalette.page : '#fff',
+        boxShadow: active ? '0 4px 12px rgba(59,130,246,0.12)' : 'none',
         transition: 'border-color .2s, box-shadow .2s',
       }}
     >
@@ -340,10 +338,8 @@ function SwitchCard({ item }: { item: SwitchTarget }) {
           justifyContent: 'center',
           fontSize: 16,
           fontWeight: 600,
-          color: item.current ? '#fff' : '#4f46e5',
-          background: item.current
-            ? 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)'
-            : 'rgba(79,70,229,0.08)',
+          color: item.current ? '#fff' : kaiwuPalette.primary,
+          background: item.current ? kaiwuPalette.primary : kaiwuPalette.primarySoft,
         }}
       >
         {item.current ? <AppstoreOutlined /> : item.name.slice(0, 1)}
@@ -360,7 +356,94 @@ function SwitchCard({ item }: { item: SwitchTarget }) {
           {item.caption}
         </Typography.Text>
       </div>
-      {item.current && <CheckCircleFilled style={{ color: '#4f46e5', flexShrink: 0 }} />}
+      {item.current && <CheckCircleFilled style={{ color: kaiwuPalette.primary, flexShrink: 0 }} />}
+    </div>
+  );
+}
+
+/** 菜单底部只保留助手入口；当前账号与退出统一在右上角用户菜单。 */
+export function SidebarFooter({ collapsed }: { collapsed: boolean }) {
+  const intl = useIntl();
+  const user = currentUserSnapshot();
+  const canAsk = user?.permissions.includes('system:agent:ask');
+  return (
+    <div className={`kaiwu-sidebar-footer${collapsed ? ' is-collapsed' : ''}`}>
+      {canAsk &&
+        (collapsed ? (
+          <div className="kaiwu-sidebar-assistant">
+            <Button
+              type="text"
+              icon={<LineIcon name="spark" size={17} />}
+              onClick={requestAgentMode}
+              aria-label={intl.formatMessage({ id: 'agent.mode.enter' })}
+            />
+          </div>
+        ) : (
+          <div className="kaiwu-sidebar-assistant">
+            <strong>
+              <LineIcon name="spark" size={13} />
+              {intl.formatMessage({ id: 'layout.assistant.try' })}
+            </strong>
+            <Typography.Paragraph>
+              {intl.formatMessage({ id: 'layout.assistant.desc' })}
+            </Typography.Paragraph>
+            <Button
+              type="link"
+              className="kaiwu-sidebar-assistant-link"
+              onClick={requestAgentMode}
+              aria-label={intl.formatMessage({ id: 'agent.mode.enter' })}
+            >
+              {intl.formatMessage({ id: 'layout.assistant.enter' })}
+              <LineIcon name="arrow" size={12} />
+            </Button>
+          </div>
+        ))}
+    </div>
+  );
+}
+
+/** 面包屑采用后端菜单名称，随当前路由更新。 */
+export function PlatformBreadcrumb({ aiMode = false }: { aiMode?: boolean }) {
+  const { pathname } = useLocation();
+  const intl = useIntl();
+  const [menus, setMenus] = useState<NavigationMenu[]>([]);
+  useEffect(() => {
+    let active = true;
+    void queryNavigationMenus()
+      .then((rows) => {
+        if (active) setMenus(rows);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+  // 返回当前菜单及其所在分组名；分组名作为面包屑第一级，与侧栏分组标题一致。
+  const find = (
+    nodes: NavigationMenu[],
+    group?: string,
+  ): { name: string; group?: string } | undefined => {
+    for (const node of nodes) {
+      if (node.path === pathname) return { name: node.name, group };
+      const child = find(node.children ?? [], node.children?.length ? node.name : group);
+      if (child) return child;
+    }
+    return undefined;
+  };
+  const current = aiMode ? undefined : find(menus);
+  return (
+    <div className="kaiwu-header-breadcrumb">
+      <span>
+        {aiMode
+          ? intl.formatMessage({ id: 'layout.workspace' })
+          : (current?.group ??
+            // 顶层独立菜单在侧栏里归入「工作空间」分组，面包屑保持一致。
+            (current ? intl.formatMessage({ id: 'layout.workspace' }) : kaiwuBrand.shortName))}
+      </span>
+      <span>/</span>
+      <strong>
+        {aiMode ? intl.formatMessage({ id: 'agent.workspace.title' }) : current?.name}
+      </strong>
     </div>
   );
 }

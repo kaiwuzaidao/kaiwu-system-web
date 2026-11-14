@@ -80,11 +80,12 @@ test('项目管理为尚未生成的项目提供「生成第一版」', async ({
   await page.goto('/projects');
 
   const projectRow = page.getByRole('row').filter({ hasText: '待生成项目' });
-  await projectRow.getByRole('button', { name: '生成第一版' }).click();
+  await projectRow.getByRole('button', { name: '操作' }).click();
+  await page.getByRole('button', { name: '生成第一版' }).click();
 
   await expect(page.getByText('生成第一版：待生成项目', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('生成方式')).toBeVisible();
-  await expect(page.getByLabel('业务描述')).toBeVisible();
-  // 只读 DDL 导入随生成入口一起搬到项目上，不能在收口过程中丢掉。
-  await expect(page.getByRole('button', { name: '从 MySQL 只读导入结构' })).toBeVisible();
+  await expect(page.getByLabel('生成方式')).toHaveCount(0);
+  await expect(page.getByLabel('MySQL DDL')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '从 MySQL 只读导入结构' })).toHaveCount(0);
+  await expect(page.getByText('基础空脚手架', { exact: false }).first()).toBeVisible();
 });
