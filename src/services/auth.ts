@@ -358,8 +358,7 @@ async function refreshAccessToken(): Promise<string | undefined> {
 
 /** 页面启动时通过 HttpOnly Cookie 恢复会话；无有效 Cookie 属于正常未登录状态。 */
 export async function restoreSession(): Promise<boolean> {
-  if (hasSession()) return true;
-  const restored = await refreshTokens(false);
+  const restored = sessionState ?? (await refreshTokens(false));
   if (!restored) return false;
   try {
     const activeLocale = await activateAuthenticatedLocale(restored.user.locale);
