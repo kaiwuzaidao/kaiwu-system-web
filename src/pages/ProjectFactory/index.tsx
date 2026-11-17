@@ -51,7 +51,7 @@ function deliveryReadiness(task: ProjectGeneration) {
   return [
     task.status === 'SUCCESS',
     task.backendFiles.length > 0,
-    task.frontendFiles.length > 0,
+    task.generationMode === 'ADOPT_FRONTEND' || task.frontendFiles.length > 0,
   ].filter(Boolean).length;
 }
 
@@ -312,43 +312,46 @@ export default function ProjectFactoryPage() {
                   >
                     {intl.formatMessage({ id: 'factory.action.backendZip' })}
                   </AuthButton>
-                  <AuthButton
-                    type="link"
-                    size="small"
-                    icon={<CloudDownloadOutlined />}
-                    permission="system:project-factory:download"
-                    permissions={permissions}
-                    disabled={task.status !== 'SUCCESS'}
-                    onClick={() =>
-                      void downloadProjectArtifact(task, 'FRONTEND').catch((error) =>
-                        message.error(error instanceof Error ? error.message : String(error)),
-                      )
-                    }
-                  >
-                    {intl.formatMessage({ id: 'factory.action.frontendZip' })}
-                  </AuthButton>
-                  {task.status === 'FAILED' && task.generationMode === 'BASIC_SCAFFOLD' && (
+                  {task.generationMode !== 'ADOPT_FRONTEND' && (
                     <AuthButton
                       type="link"
                       size="small"
-                      icon={<EditOutlined />}
-                      permission="system:project-factory:generate"
+                      icon={<CloudDownloadOutlined />}
+                      permission="system:project-factory:download"
                       permissions={permissions}
-                      onClick={async () => {
-                        try {
-                          const input = await queryProjectGenerationInput(task.taskNo);
-                          setRetryInput(input);
-                          setRetryTask(task);
-                        } catch (error) {
-                          void message.error(
-                            error instanceof Error ? error.message : String(error),
-                          );
-                        }
-                      }}
+                      disabled={task.status !== 'SUCCESS'}
+                      onClick={() =>
+                        void downloadProjectArtifact(task, 'FRONTEND').catch((error) =>
+                          message.error(error instanceof Error ? error.message : String(error)),
+                        )
+                      }
                     >
-                      {intl.formatMessage({ id: 'factory.action.retry' })}
+                      {intl.formatMessage({ id: 'factory.action.frontendZip' })}
                     </AuthButton>
                   )}
+                  {task.status === 'FAILED' &&
+                    ['BASIC_SCAFFOLD', 'ADOPT_FRONTEND'].includes(task.generationMode) && (
+                      <AuthButton
+                        type="link"
+                        size="small"
+                        icon={<EditOutlined />}
+                        permission="system:project-factory:generate"
+                        permissions={permissions}
+                        onClick={async () => {
+                          try {
+                            const input = await queryProjectGenerationInput(task.taskNo);
+                            setRetryInput(input);
+                            setRetryTask(task);
+                          } catch (error) {
+                            void message.error(
+                              error instanceof Error ? error.message : String(error),
+                            );
+                          }
+                        }}
+                      >
+                        {intl.formatMessage({ id: 'factory.action.retry' })}
+                      </AuthButton>
+                    )}
                 </Space>
               ),
             },
@@ -491,14 +494,18 @@ export default function ProjectFactoryPage() {
                   ),
                   children: <FileList files={preview.backendFiles} />,
                 },
-                {
-                  key: 'frontend',
-                  label: intl.formatMessage(
-                    { id: 'factory.preview.frontendFiles' },
-                    { count: preview.frontendFiles.length },
-                  ),
-                  children: <FileList files={preview.frontendFiles} />,
-                },
+                ...(preview.generationMode === 'ADOPT_FRONTEND'
+                  ? []
+                  : [
+                      {
+                        key: 'frontend',
+                        label: intl.formatMessage(
+                          { id: 'factory.preview.frontendFiles' },
+                          { count: preview.frontendFiles.length },
+                        ),
+                        children: <FileList files={preview.frontendFiles} />,
+                      },
+                    ]),
               ]}
             />
           </>
