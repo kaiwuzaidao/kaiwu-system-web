@@ -28,6 +28,8 @@ test.describe('已上线能力：管理员只读 API 验收', () => {
         '/api/org/departments',
         '/api/scheduler/jobs?current=1&size=10',
         '/api/scheduler/executions?current=1&size=10',
+        '/api/storage/accounts',
+        '/api/storage/bindings',
         '/api/search?q=system',
       ]) {
         await expectSuccess(await api.get(path));

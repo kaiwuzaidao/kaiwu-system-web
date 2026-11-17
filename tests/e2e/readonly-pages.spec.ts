@@ -23,6 +23,8 @@ test.describe('已上线页面：管理员只读验收', () => {
   test.beforeAll(requireAdminCredentials);
 
   test.beforeEach(async ({ page }) => {
+    // 这些用例验收传统后台，与首次登录时是否自动展示助手的账号偏好无关。
+    await page.addInitScript(() => sessionStorage.setItem('kaiwu.agent.autoOpened', '1'));
     await loginAsAdmin(page);
   });
 
@@ -34,11 +36,17 @@ test.describe('已上线页面：管理员只读验收', () => {
   }
 
   test('用户菜单可进入个人设置并退出登录', async ({ page }) => {
-    await page.locator('.ant-avatar').click();
-    await page.getByText('个人设置', { exact: true }).click();
+    await page
+      .locator('#root .kaiwu-header-user')
+      .getByRole('button', { name: '个人设置' })
+      .click();
+    await page.getByRole('menuitem', { name: '个人设置' }).click();
     await expect(page).toHaveURL(/\/profile$/);
-    await page.locator('.ant-avatar').click();
-    await page.getByText('退出登录', { exact: true }).click();
+    await page
+      .locator('#root .kaiwu-header-user')
+      .getByRole('button', { name: '个人设置' })
+      .click();
+    await page.getByRole('menuitem', { name: '退出登录' }).click();
     await expect(page).toHaveURL(/\/login$/);
   });
 
@@ -53,18 +61,15 @@ test.describe('已上线页面：管理员只读验收', () => {
     await expect(page.getByRole('menuitem', { name: /工作台/ })).toBeVisible();
     await expect(page.getByRole('link', { name: /消息中心/ })).toBeVisible();
 
-    const platformGroup = page.getByRole('menuitem', { name: /平台管理/ });
-    await expect(platformGroup).toBeVisible();
-    await platformGroup.click();
-    await expect(page.getByRole('link', { name: /用户管理/ })).toBeVisible();
-    await expect(page.getByRole('link', { name: /字典管理/ })).toBeVisible();
-    await expect(page.getByRole('link', { name: /定时任务/ })).toBeVisible();
+    const groups = page.getByRole('menu').locator('.ant-menu-item-group');
+    const platformGroup = groups.filter({ has: page.getByText('平台管理', { exact: true }) });
+    await expect(platformGroup.getByRole('link', { name: '用户管理' })).toBeVisible();
+    await expect(platformGroup.getByRole('link', { name: '字典管理' })).toBeVisible();
+    await expect(platformGroup.getByRole('link', { name: '定时任务' })).toBeVisible();
 
-    const deliveryGroup = page.getByRole('menuitem', { name: /研发交付/ });
-    await expect(deliveryGroup).toBeVisible();
-    await deliveryGroup.click();
-    await expect(page.getByRole('link', { name: /大模型配置/ })).toBeVisible();
-    await expect(page.getByRole('link', { name: /项目工厂/ })).toBeVisible();
+    const deliveryGroup = groups.filter({ has: page.getByText('研发交付', { exact: true }) });
+    await expect(deliveryGroup.getByRole('link', { name: '大模型配置' })).toBeVisible();
+    await expect(deliveryGroup.getByRole('link', { name: '项目工厂' })).toBeVisible();
     await expect(page.getByRole('link', { name: /交付中心/ })).toHaveCount(0);
   });
 
@@ -97,8 +102,8 @@ test.describe('已上线页面：管理员只读验收', () => {
     await page.goto('/');
 
     await expect(page.getByRole('menuitem', { name: /工作台/ })).toBeVisible();
-    await expect(page.getByRole('menuitem', { name: /平台管理/ })).toHaveCount(0);
-    await expect(page.getByRole('menuitem', { name: /研发交付/ })).toHaveCount(0);
+    await expect(page.getByRole('menu').getByText('平台管理', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('menu').getByText('研发交付', { exact: true })).toHaveCount(0);
   });
 
   test('项目管理中的开通项目按钮进入向导', async ({ page }) => {

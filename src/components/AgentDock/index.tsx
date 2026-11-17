@@ -4,7 +4,7 @@ import {
   PlusOutlined,
   ReloadOutlined,
 } from '@ant-design/icons';
-import { history, useIntl } from '@umijs/max';
+import { history, useIntl, useLocation } from '@umijs/max';
 import {
   Alert,
   App,
@@ -108,6 +108,7 @@ type Turn = {
  */
 export default function AgentDock() {
   const intl = useIntl();
+  const { pathname } = useLocation();
   const { message } = App.useApp();
   const [open, setOpen] = useState(false);
   useEffect(() => {
@@ -215,10 +216,15 @@ export default function AgentDock() {
   // 全新安装的第一个管理员默认开启该偏好：改完初始密码后直接进入，在对话里完成首次配置。
   useEffect(() => {
     const user = currentUserSnapshot();
+    // 设备确认页必须先让用户核对客户端和授权码，仍可手动打开助手。
+    if (pathname === '/device') {
+      setOpen(false);
+      return;
+    }
     if (!allowed || !user?.agentAutoOpen || mustChangePassword || readAutoOpened()) return;
     writeAutoOpened(true);
     setOpen(true);
-  }, [allowed, mustChangePassword]);
+  }, [allowed, mustChangePassword, pathname]);
 
   // 传统模式侧栏里的「AI 助手模式」入口。
   useEffect(() => subscribeAgentMode(() => setOpen(true)), []);

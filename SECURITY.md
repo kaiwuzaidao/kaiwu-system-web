@@ -14,7 +14,7 @@
 
 ## Dependency audit exceptions
 
-`pnpm audit --prod --audit-level high` 是 `pnpm verify` 的门禁。只有**暂无修复版本**、且只出现在构建工具链
+依赖变更时单独运行 `pnpm audit:prod`，它执行 `pnpm audit --prod --audit-level high`。只有**暂无修复版本**、且只出现在构建工具链
 （不进入浏览器产物）的公告才允许豁免，与 CI 中 Trivy 的 `--ignore-unfixed` 策略一致。豁免写在
 `package.json` 的 `pnpm.auditConfig.ignoreGhsas`，必须与生成项目前端模板保持一致（`pnpm check:security-pins`）。
 
