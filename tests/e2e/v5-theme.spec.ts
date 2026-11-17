@@ -854,3 +854,51 @@ test('Ant Pro 公共布局与官方预览尺寸一致', async ({ page }) => {
     fullPage: true,
   });
 });
+
+test('项目管理页签与搜索框在侧栏和工具栏变宽变窄时保持稳定', async ({ page }) => {
+  await mockPlatform(page);
+  await page.goto('/projects');
+  await expect(page.getByRole('row').filter({ hasText: 'demo-project' })).toBeVisible();
+  const tabs = page.locator('.kaiwu-table-tabs');
+  const input = page.locator('.kaiwu-table-search input');
+  await page.evaluate(() => document.fonts.ready);
+
+  const stable = async () => {
+    // A settled layout must stay still across frames; comparing two screenshots can miss an alternating width.
+    const positions = await input.evaluate(async (node) => {
+      // Wait for the responsive layout and input's width transition before measuring idle frames.
+      for (let i = 0; i < 2; i++) await new Promise(requestAnimationFrame);
+      await Promise.allSettled(
+        document
+          .getAnimations()
+          .filter((animation) => animation instanceof CSSTransition)
+          .map((animation) => animation.finished),
+      );
+      const samples = new Set<string>();
+      for (let frame = 0; frame < 54; frame++) {
+        await new Promise<void>((done) => requestAnimationFrame(() => done()));
+        const { x, y, width } = node.getBoundingClientRect();
+        samples.add([x, y, width].map(Math.round).join(','));
+      }
+      return [...samples];
+    });
+    expect(positions, `viewport ${page.viewportSize()?.width}`).toHaveLength(1);
+    return positions[0];
+  };
+
+  for (const width of [1440, 1280, 1024, 768, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    await stable();
+    await expect(input).toBeInViewport();
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const desktopPosition = await stable();
+  await tabs.getByRole('tab').last().click();
+  expect(await stable()).toBe(desktopPosition);
+  await input.fill('demo');
+  await input.press('Enter');
+  await expect(input).toBeFocused();
+  expect(await stable()).toBe(desktopPosition);
+  await input.fill('');
+  expect(await stable()).toBe(desktopPosition);
+});
