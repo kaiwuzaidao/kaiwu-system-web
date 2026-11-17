@@ -34,7 +34,7 @@ export type ProjectGenerationEditableInput = ProjectGenerationRetryInput & {
   taskNo: string;
   projectId: string;
   projectName: string;
-  generationMode: 'AI_PROJECT' | 'BASIC_SCAFFOLD' | 'DDL_SCAFFOLD';
+  generationMode: 'AI_PROJECT' | 'BASIC_SCAFFOLD' | 'DDL_SCAFFOLD' | 'ADOPT_FRONTEND';
 };
 
 export function queryProjectGenerations(projectId?: string) {
